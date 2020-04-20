@@ -1,0 +1,211 @@
+#!/usr/bin/python3
+import argparse
+import os
+import sys
+import time
+
+start_time = time.time()
+parser = argparse.ArgumentParser(description="""PlasLR Plasmid Classification Corrector""")
+
+parser.add_argument('-r',
+                    metavar='<READS PATH>',
+                    help="Reads path (FASTQ)",
+                    type=str,
+                    required=True)
+parser.add_argument('-t',
+                    metavar='<THREADS>',
+                    help="Thread limit",
+                    type=int,
+                    default=8,
+                    required=False)
+parser.add_argument('-i',
+                    metavar='<IDS>',
+                    help="Read ids of reads (For dry runs with ground truth)",
+                    type=str,
+                    required=False,
+                    default=None)   
+parser.add_argument('-b',
+                    metavar='<bin width for coverage histograms>',
+                    help="Value of bx32 will be the total coverage of k-mers in the coverage histograms. \
+                        Usually k-mers are shifted towards y-axis due to errors. By defaul b=10; coverages upto 320X",
+                    type=int,
+                    required=False,
+                    default=10)                
+parser.add_argument('-m',
+                    metavar='<Max memory for DSK in Mb>',
+                    help="Default 5000. DSK k-mer counter accepts a max memory parameter. However, the complete pipeline requires 5GB+ RAM. \
+                        This is only to make DSK step faster, should you have more RAM.",
+                    type=int,
+                    required=False,
+                    default=5000)                                                
+parser.add_argument('--resume',
+                    action='store_true',
+                    help='Continue from the last step or the binning step (which ever comes first). Can save time needed to run DSK and obtain k-mers. Ideal for sensitivity tuning'
+                    )                       
+parser.add_argument('-pf',
+                    metavar='',
+                    help="PlasFlow result tsv",
+                    type=str,
+                    default=None,
+                    required=False)
+parser.add_argument('-pc',
+                    metavar='',
+                    help="PlasClass result",
+                    type=str,
+                    default=None,
+                    required=False)
+parser.add_argument('-o', metavar='<DEST>', help="Output directory", type=str, required=True)
+
+args = parser.parse_args()
+
+readsPath = args.r
+output = args.o
+threads = args.t
+ids = args.i
+resume = args.resume
+bin_size = args.b
+max_ram = max(args.m, 5000)
+checkpointsPath = output + "/checkpoints"
+classification = args.pf
+
+if classification == None:
+    classification = args.pc
+
+if classification == None:
+    print("Must provide either -pf or -pc as the input")
+    print("Program exitting")
+    sys.exit(1)
+
+def updateCheckpoints(newChecks):
+    with open(checkpointsPath, "w+") as f:
+        f.write(str(newChecks))
+
+def loadCheckpoints():
+    if not os.path.isfile(checkpointsPath):
+        print("No checkpoints from previous runs available")
+        return False
+    else:
+        with open(checkpointsPath, "r") as f:
+            lines = f.read().strip().split("\n")
+            data = eval(lines[0])
+
+            return data
+
+# Validation of inputs
+if threads <= 0:
+    print("Minimum number of threads is 1. Using thread count 1 and continue")
+    threads = 1
+
+if not os.path.isfile(readsPath):
+    print("Failed to open reads file")
+    print("Exitting process. Good Bye!")
+    sys.exit(1)
+
+if ids and not os.path.isfile(ids):
+    print("Failed to open read ids. Continue without ids")
+    ids = None
+
+if not os.path.exists(output):
+    os.makedirs(output)
+
+if not readsPath.split(".")[-1].lower() in ['fq', 'fasta', 'fa', 'fastq']:
+    print("Unable to detect file type of reads. Please use either FASTA of FASTQ. Good Bye!")
+    sys.exit(1)
+
+def checkProc(ret, n=None):
+    if ret != 0:
+        if n: print("Error in step:", n)
+        print("Failed due to an error. Please check the log. Good Bye!")
+        sys.exit(ret)
+
+fileType = readsPath.split(".")[-1].lower()
+
+if resume:
+    data = loadCheckpoints()
+
+    if not data:
+        resume = False
+
+if not resume:
+    data = {}
+    data['r'] = readsPath
+    data['o'] = output
+    data['t'] = threads
+    data['i'] = ids
+    data['completed'] = set()
+
+    updateCheckpoints(data)
+
+if resume and "filtering" not in data['completed'] or not resume:
+    # convert reads to filtered fasta
+    print("Filtering reads")
+    if fileType in ['fq', 'fastq']:
+        if ids:
+            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fq "{3}" "{2}"/ids.txt """.format(os.path.dirname(__file__), readsPath, output, ids)
+        else:
+            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fq""".format(os.path.dirname(__file__), readsPath, output)
+    else:
+        if ids:
+            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fa "{3}" "{2}"/ids.txt """.format(os.path.dirname(__file__), readsPath, output, ids)
+        else:
+            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fa""".format(os.path.dirname(__file__), readsPath, output)
+    
+    o = os.system(cmdFilter)
+    checkProc(o, "Filtering reads")
+
+    data['completed'].add('filtering')
+    updateCheckpoints(data)
+
+if resume and "dsk" not in data['completed'] or not resume:
+    print("Running DSK")
+    cmdDSK = """dsk -verbose 0 -file "{0}/reads.fa" -kmer-size 15 -abundance-min 10 -out-dir "{0}/DSK" -max-memory {1} -nb-cores {2}""".format(output, max_ram, threads)
+    o = os.system(cmdDSK)
+    checkProc(o, "Running DSK")
+
+    print("Reading DSK output")
+    cmdDSKRead = """python {0}/src/scan-dsk.py {1}/DSK/reads.h5 {1}/DSK/ {2}""".format(os.path.dirname(__file__), output, threads)
+    o = os.system(cmdDSKRead)
+    checkProc(o, "Reading DSK output")
+
+    print("Gathering DSK data")
+    cmdGather = """cat "{0}"/DSK/*.chunk > "{0}/DSK/15mersCounts" """.format(output)
+    o = os.system(cmdGather)
+    checkProc(o, "Gathering DSK data")
+
+    data['completed'].add('dsk')
+    updateCheckpoints(data)
+
+if resume and "trimers" not in data['completed'] or not resume:
+    print("Counting Trimers")
+    checkProc(o, "Making directory for profiles")
+
+    cmd = """"{0}/bin/countTrimers" "{1}/reads.fa" "{1}/3mers" {2}""".format(os.path.dirname(__file__), output, threads)
+    o = os.system(cmd)
+    checkProc(o, "Counting Trimers")
+
+    data['completed'].add('trimers')
+    updateCheckpoints(data)
+
+if resume and "15mers" not in data['completed'] or not resume:
+    print("Counting 15-mer profiles")
+    cmd = """"{0}/bin/search15mers" "{1}/DSK/15mersCounts" "{1}/reads.fa" "{1}/15mers" {2} {3}""".format(os.path.dirname(__file__), output, bin_size, threads)
+    o = os.system(cmd)
+    checkProc(o, "Counting 15-mer profiles")
+
+    data['completed'].add('15mers')
+    updateCheckpoints(data)
+
+
+print("Correcting Plasmid Classification")
+cmd = """"{0}/src/PlasmidCorrection.py" -p3 {1}/3mers -p15 {1}/15mers -t {2}""".format(os.path.dirname(__file__), output, threads)
+
+if ids:
+    cmd += """ -i "{0}"/ids.txt """.format(ids)
+
+if args.pf:
+    cmd += """ -pf "{0}" """.format(classification)
+else:
+    cmd += """ -pc "{0}" """.format(classification)
+cmd += """ -0 "{0}" """.format(output)
+o = os.system(cmd)
+checkProc(o, "Correcting Plasmid Classification")
