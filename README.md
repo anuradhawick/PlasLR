@@ -9,3 +9,32 @@ sh build.sh
 
 ## Running Program
 
+```
+usage: PlasLR [-h] -r <READS PATH> [-t <THREADS>] [-i <IDS>]
+              [-b <bin width for coverage histograms>]
+              [-m <Max memory for DSK in Mb>] [--resume] [-pf] [-pc] -o <DEST>
+
+PlasLR Plasmid Classification Corrector
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -r <READS PATH>       Reads path (FASTQ)
+  -t <THREADS>          Thread limit
+  -i <IDS>              Read ids of reads (For dry runs with ground truth)
+  -b <bin width for coverage histograms>
+                        Value of bx32 will be the total coverage of k-mers in
+                        the coverage histograms. Usually k-mers are shifted
+                        towards y-axis due to errors. By defaul b=10;
+                        coverages upto 320X
+  -m <Max memory for DSK in Mb>
+                        Default 5000. DSK k-mer counter accepts a max memory
+                        parameter. However, the complete pipeline requires
+                        5GB+ RAM. This is only to make DSK step faster, should
+                        you have more RAM.
+  --resume              Continue from the last step or the binning step (which
+                        ever comes first). Can save time needed to run DSK and
+                        obtain k-mers. Ideal for sensitivity tuning
+  -pf                   PlasFlow result tsv
+  -pc                   PlasClass result
+  -o <DEST>             Output directory
+```
