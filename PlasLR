@@ -197,15 +197,16 @@ if resume and "15mers" not in data['completed'] or not resume:
 
 
 print("Correcting Plasmid Classification")
-cmd = """"{0}/src/PlasmidCorrection.py" -p3 {1}/3mers -p15 {1}/15mers -t {2}""".format(os.path.dirname(__file__), output, threads)
+cmd = """python "{0}/src/PlasmidCorrection.py" -p3 {1}/3mers -p15 {1}/15mers -t {2}""".format(os.path.dirname(__file__), output, threads)
 
 if ids:
-    cmd += """ -i "{0}"/ids.txt """.format(ids)
+    cmd += """ -i "{0}"/ids.txt """.format(output)
 
 if args.pf:
     cmd += """ -pf "{0}" """.format(classification)
 else:
     cmd += """ -pc "{0}" """.format(classification)
-cmd += """ -0 "{0}" """.format(output)
+cmd += """ -o "{0}" """.format(output)
+
 o = os.system(cmd)
 checkProc(o, "Correcting Plasmid Classification")
