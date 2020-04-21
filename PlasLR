@@ -54,6 +54,27 @@ parser.add_argument('-pc',
                     type=str,
                     default=None,
                     required=False)
+parser.add_argument('-prob_chrom',
+                    metavar='',
+                    help="Chromosome [Default 0.7 for plasclass and 0.5 for plasflow]",
+                    type=float,
+                    default=None,
+                    required=False)
+parser.add_argument('-prob_plas',
+                    metavar='',
+                    help="Plasmid Threshold [Default 0.3 for plasclass and 0.7 for plasflow]",
+                    type=str,
+                    default=None,
+                    required=False)
+parser.add_argument('-label_corr',
+                    metavar='',
+                    help="Whether the initial classifications to be corrected or classify based on already labelled ones",
+                    type=bool,
+                    default=True,
+                    required=False)
+parser.add_argument('-plots',
+                    metavar='',
+                    help="Whether the initial classifications to be corrected or classify based on already labelled ones")
 parser.add_argument('-o', metavar='<DEST>', help="Output directory", type=str, required=True)
 
 args = parser.parse_args()
@@ -67,6 +88,10 @@ bin_size = args.b
 max_ram = max(args.m, 5000)
 checkpointsPath = output + "/checkpoints"
 classification = args.pf
+prob_plas = args.prob_plas
+prob_chrom = args.prob_chrom
+label_corr = args.label_corr
+plots = args.plots
 
 if classification == None:
     classification = args.pc
@@ -206,7 +231,16 @@ if args.pf:
     cmd += """ -pf "{0}" """.format(classification)
 else:
     cmd += """ -pc "{0}" """.format(classification)
+if prob_plas:
+    cmd += """ -prob_plas {0} """.format(prob_plas)
+if prob_chrom:
+    cmd += """ -prob_chrom {0} """.format(prob_chrom)
+if label_corr:
+    cmd += """ -label_corr {0} """.format(label_corr)
+if plots:
+    cmd += """ -plots {0} """.format(plots)
 cmd += """ -o "{0}" """.format(output)
+
 
 o = os.system(cmd)
 checkProc(o, "Correcting Plasmid Classification")

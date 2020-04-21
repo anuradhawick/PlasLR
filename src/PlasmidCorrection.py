@@ -30,6 +30,27 @@ parser.add_argument('-pc',
                     type=str,
                     default=None,
                     required=False)
+parser.add_argument('-prob_chrom',
+                    metavar='',
+                    help="Chromosome [Default 0.7 for plasclass and 0.5 for plasflow]",
+                    type=float,
+                    default=None,
+                    required=False)
+parser.add_argument('-prob_plas',
+                    metavar='',
+                    help="Plasmid Threshold [Default 0.3 for plasclass and 0.7 for plasflow]",
+                    type=str,
+                    default=None,
+                    required=False)
+parser.add_argument('-label_corr',
+                    metavar='',
+                    help="Whether the initial classifications to be corrected or classify based on already labelled ones",
+                    type=bool,
+                    default=True,
+                    required=False)
+parser.add_argument('-plots',
+                    action='store_true',
+                    help="Whether the initial classifications to be corrected or classify based on already labelled ones")
 parser.add_argument('-i',
                     metavar='',
                     help="Read ids of reads (For dry runs with ground truth)",
@@ -74,11 +95,26 @@ p15 = args.p15
 truth = args.i 
 output = args.o
 threads = args.t
+prob_plas = args.prob_plas
+prob_chrom = args.prob_chrom
+label_corr = args.label_corr
+plots = args.plots
+
+if prob_plas==None:
+    if args.pf != None:
+        prob_plas=0.7
+    else:
+        prob_plas=0.7
+if prob_chrom==None:
+    if args.pf != None:
+        prob_chrom=0.5
+    else:
+        prob_chrom=0.3
 
 if not os.path.exists(output):
     os.makedirs(output)
 
-def evalCs(truth, clusters):
+def evalCs(truth, clusters, ignoreuncls = False):
     string_output = ""
     clusterIds = {}
     speciesIds = {}
@@ -124,9 +160,32 @@ def evalCs(truth, clusters):
         tot += sum(x)
         rMax += max(x)
 
-    precision = precision_score(t_arr, p_arr, average='micro')
+    
+    if ignoreuncls:
+        t_arr2 = []
+        p_arr2 = []
+        for t, p in zip(t_arr, p_arr):
+            if p == "Unclassified":
+                continue
+            else:
+                t_arr2.append(t)
+                p_arr2.append(p)
+        precision = precision_score(t_arr2, p_arr2, average='micro')
+    else:
+        precision = precision_score(t_arr, p_arr, average='micro')
     recall = recall_score(t_arr, p_arr, average='micro')
-    f1 = f1_score(t_arr, p_arr, average='micro')
+    if ignoreuncls:
+        f1 = 2*recall*precision/(recall+precision)
+    else:
+        f1 = f1_score(t_arr, p_arr, average='micro')
+
+    plasmids_recovered = 0
+    pls_count = 0
+    for t, p in zip(t_arr, p_arr):
+        if t=="Plasmid":
+            pls_count += 1
+            if p=="Plasmid":
+                plasmids_recovered+=1
     print("\n\n")
     print("Precision ", precision)
     string_output += "\n"
@@ -135,6 +194,8 @@ def evalCs(truth, clusters):
     string_output += "Recall    {}\n".format(recall)
     print("F1 Score ", f1)
     string_output += "F1 Score  {}\n".format(f1)
+    print("Plasmdis Recovered ", plasmids_recovered/pls_count)
+    string_output += "Plasmdis Recovered   {}\n".format(plasmids_recovered/pls_count)
     return string_output
 
 def processLabel(x):
@@ -165,9 +226,9 @@ if args.pf != None:
             cluster = bar[5::][am].split(".")[0]
             cluster = processLabel(cluster)
             
-            if prob < 0.7 and cluster.lower() in "plasmid":
+            if prob < prob_plas and cluster.lower() in "plasmid":
                 cluster = "Unclassified"
-            elif prob < 0.5 and cluster.lower() in "chromosome":
+            elif prob < prob_chrom and cluster.lower() in "chromosome":
                 cluster = "Unclassified"
                 
             _arr.append(cluster)
@@ -186,15 +247,16 @@ elif args.pc != None:
             else:
                 original_labels.append("Chromosome")
 
-            if prob > 0.8:
+            if prob > prob_plas:
                 cluster = "Plasmid"
-            elif prob < 0.5:
+            elif prob < prob_chrom:
                 cluster = "Chromosome"
             else:
                 cluster = "Unclassified"
                 
             _arr.append(cluster)
         classification = _arr
+
 if truth:
     truth = [processLabel(x) for x in open(truth).read().split()]
 p3 = np.array([[float(y) for y in x.strip().split()] for x in open(p3).read().strip().split("\n")])
@@ -208,27 +270,28 @@ p15_p3_2d = pca2.fit_transform(p15_p3)
 pca3 = PCA(n_components=2)
 p3_2d = pca3.fit_transform(p3)
 
-# fig = plt.figure(figsize=(5, 5))
-# sns.scatterplot(p15_2d[:,0], p15_2d[:,1], hue=truth, palette=palette)
-# plt.xlabel("PCA 1")
-# plt.ylabel("PCA 2")
-# plt.savefig(output + "/truth_cov_comp.png", dpi=1200)
+if plots:
+    # fig = plt.figure(figsize=(5, 5))
+    # sns.scatterplot(p15_2d[:,0], p15_2d[:,1], hue=truth, palette=palette)
+    # plt.xlabel("PCA 1")
+    # plt.ylabel("PCA 2")
+    # plt.savefig(output + "/truth_cov_comp.png", dpi=1200)
 
-# fig = plt.figure(figsize=(5, 5))
-# sns.scatterplot(p15_p3_2d[:,0], p15_p3_2d[:,1], hue=truth, palette=palette)
-# plt.xlabel("PCA 1", fontsize=20)
-# plt.ylabel("PCA 2", fontsize=20)
-# # plt.savefig(output + "/truth_cov_comp.svg", format="svg", bbox_inches='tight')
-# plt.savefig(output + "/truth_cov_comp.eps", dpi=1200, bbox_inches='tight')
-# plt.savefig(output + "/truth_cov_comp.png", dpi=300, bbox_inches='tight')
-
-# fig = plt.figure(figsize=(5, 5))
-# sns.scatterplot(p15_p3_2d[:,0], p15_p3_2d[:,1], hue=classification, palette=palette)
-# plt.xlabel("PCA 1", fontsize=20)
-# plt.ylabel("PCA 2", fontsize=20)
-# plt.savefig(output + "/labels_before_removal.svg", format="svg", bbox_inches='tight')
-# plt.savefig(output + "/labels_before_removal.eps", dpi=1200, bbox_inches='tight')
-# plt.savefig(output + "/labels_before_removal.png", dpi=300, bbox_inches='tight')
+    if truth:
+        fig = plt.figure(figsize=(5, 5))
+        sns.scatterplot(p15_p3_2d[:,0], p15_p3_2d[:,1], hue=truth, palette=palette)
+        plt.xlabel("PCA 1", fontsize=20)
+        plt.ylabel("PCA 2", fontsize=20)
+        # plt.savefig(output + "/truth_cov_comp.svg", format="svg", bbox_inches='tight')
+        # plt.savefig(output + "/truth_cov_comp.eps", dpi=1200, bbox_inches='tight')
+        plt.savefig(output + "/truth_cov_comp.png", dpi=300, bbox_inches='tight')
+    fig = plt.figure(figsize=(5, 5))
+    sns.scatterplot(p15_p3_2d[:,0], p15_p3_2d[:,1], hue=classification, palette=palette)
+    plt.xlabel("PCA 1", fontsize=20)
+    plt.ylabel("PCA 2", fontsize=20)
+    # plt.savefig(output + "/labels_before_removal.svg", format="svg", bbox_inches='tight')
+    # plt.savefig(output + "/labels_before_removal.eps", dpi=1200, bbox_inches='tight')
+    plt.savefig(output + "/labels_before_removal.png", dpi=300, bbox_inches='tight')
 
 # preliminary label removal of non-confident ones
 nbrs = NearestNeighbors(n_neighbors=50, algorithm='ball_tree', n_jobs=threads).fit(p15_p3_2d)
@@ -236,30 +299,30 @@ distances, indices = nbrs.kneighbors(p15_p3_2d)
 
 classification2 = list(classification)
 
-for i in indices:
-    _label = classification[i[0]]
-    _others = list(map(lambda x: classification[x], i[1:]))
-    _vote = 0
-    _all_votes = 0
-    for x in _others:
-        if x == "Unclassified":
-            continue
-        if x == _label:
-            _vote += 1
-        _all_votes += 1
-    
-    if _vote/max(_all_votes, 1) < 0.1 and _all_votes > 30:
-        classification2[i[0]] = "Unclassified"
-    # if _vote/max(_all_votes, 1) < 0.2 and _all_votes > 30 and _label == "Chromosome":
-    #     classification2[i[0]] = "Unclassified"
+if label_corr:
+    for i in indices:
+        _label = classification[i[0]]
+        _others = list(map(lambda x: classification[x], i[1:]))
+        _vote = 0
+        _all_votes = 0
+        for x in _others:
+            if x == "Unclassified":
+                continue
+            if x == _label:
+                _vote += 1
+            _all_votes += 1
+        
+        if _vote/max(_all_votes, 1) < 0.1 and _all_votes > 45:
+            classification2[i[0]] = "Unclassified"
 
-# fig = plt.figure(figsize=(5, 5))
-# sns.scatterplot(p15_p3_2d[:,0], p15_p3_2d[:,1], hue=classification2, palette=palette)
-# plt.xlabel("PCA 1", fontsize=20)
-# plt.ylabel("PCA 2", fontsize=20)
-# plt.savefig(output + "/labels_after_removal.svg", format="svg", bbox_inches='tight')
-# plt.savefig(output + "/labels_after_removal.eps", dpi=1200, bbox_inches='tight')
-# plt.savefig(output + "/labels_after_removal.png", dpi=300, bbox_inches='tight')
+    if plots:
+        fig = plt.figure(figsize=(5, 5))
+        sns.scatterplot(p15_p3_2d[:,0], p15_p3_2d[:,1], hue=classification2, palette=palette)
+        plt.xlabel("PCA 1", fontsize=20)
+        plt.ylabel("PCA 2", fontsize=20)
+        # plt.savefig(output + "/labels_after_removal.svg", format="svg", bbox_inches='tight')
+        # plt.savefig(output + "/labels_after_removal.eps", dpi=1200, bbox_inches='tight')
+        plt.savefig(output + "/labels_after_removal.png", dpi=300, bbox_inches='tight')
 
 
 # separation of labelled and unlabelled nodes
@@ -324,16 +387,17 @@ if truth:
     truth_all = np.append(truth_lbl, truth_unlb, axis=0)
 r_id_all = r_id_labelled + r_id_unlabelled
 
-# fig = plt.figure(figsize=(5, 5))
-# sns.scatterplot(all_2d[:,0], all_2d[:,1], hue=all_labels, palette=palette)
-# plt.xlabel("PCA 1", fontsize=20)
-# plt.ylabel("PCA 2", fontsize=20)
-# plt.savefig(output + "/label_corrected.eps", dpi=1200, bbox_inches='tight')
-# plt.savefig(output + "/label_corrected.png", dpi=300, bbox_inches='tight')
-# plt.savefig(output + "/label_corrected.svg", format="svg", bbox_inches='tight')
+if plots:
+    fig = plt.figure(figsize=(5, 5))
+    sns.scatterplot(all_2d[:,0], all_2d[:,1], hue=all_labels, palette=palette)
+    plt.xlabel("PCA 1", fontsize=20)
+    plt.ylabel("PCA 2", fontsize=20)
+    # plt.savefig(output + "/label_corrected.eps", dpi=1200, bbox_inches='tight')
+    # plt.savefig(output + "/label_corrected.png", dpi=300, bbox_inches='tight')
+    plt.savefig(output + "/label_corrected.svg", format="svg", bbox_inches='tight')
 
 if truth:
-    o1 = evalCs(truth, classification)
+    o1 = evalCs(truth, classification, True)
     o2 = evalCs(truth_all, all_labels)
 
 
