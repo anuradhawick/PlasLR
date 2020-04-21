@@ -12,7 +12,8 @@ sh build.sh
 ```
 usage: PlasLR [-h] -r <READS PATH> [-t <THREADS>] [-i <IDS>]
               [-b <bin width for coverage histograms>]
-              [-m <Max memory for DSK in Mb>] [--resume] [-pf] [-pc] -o <DEST>
+              [-m <Max memory for DSK in Mb>] [--resume] [-pf] [-pc]
+              [-prob_chrom] [-prob_plas] [-label_corr] [-plots] -o <DEST>
 
 PlasLR Plasmid Classification Corrector
 
@@ -36,5 +37,13 @@ optional arguments:
                         obtain k-mers. Ideal for sensitivity tuning
   -pf                   PlasFlow result tsv
   -pc                   PlasClass result
+  -prob_chrom           Chromosome [Default 0.7 for plasclass and 0.5 for
+                        plasflow]
+  -prob_plas            Plasmid Threshold [Default 0.3 for plasclass and 0.7
+                        for plasflow]
+  -label_corr           Whether the initial classifications to be corrected or
+                        classify based on already labelled ones
+  -plots                Whether the initial classifications to be corrected or
+                        classify based on already labelled ones
   -o <DEST>             Output directory
 ```
