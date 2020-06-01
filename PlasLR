@@ -55,7 +55,6 @@ parser.add_argument('-pc',
                     default=None,
                     required=False)
 parser.add_argument('-prob_chrom',
-                    metavar='',
                     help="Chromosome [Default 0.7 for plasclass and 0.5 for plasflow]",
                     type=float,
                     default=None,
@@ -67,13 +66,9 @@ parser.add_argument('-prob_plas',
                     default=None,
                     required=False)
 parser.add_argument('-label_corr',
-                    metavar='',
-                    help="Whether the initial classifications to be corrected or classify based on already labelled ones",
-                    type=bool,
-                    default=True,
-                    required=False)
+                    action='store_true',
+                    help="Whether the initial classifications to be corrected or classify based on already labelled ones")
 parser.add_argument('-plots',
-                    metavar='',
                     help="Whether the initial classifications to be corrected or classify based on already labelled ones")
 parser.add_argument('-o', metavar='<DEST>', help="Output directory", type=str, required=True)
 

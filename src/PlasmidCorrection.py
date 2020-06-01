@@ -63,17 +63,12 @@ parser.add_argument('-o',
                     type=str,
                     required=True)                    
 parser.add_argument('-p3',
-                    metavar='',
-                    help="",
                     type=str,
                     required=True)
 parser.add_argument('-p15',
-                    metavar='',
-                    help="",
                     type=str,
                     required=True)
 parser.add_argument('-t',
-                    metavar='',
                     help="Threads",
                     type=int,
                     default=8,
