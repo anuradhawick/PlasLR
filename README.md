@@ -1,5 +1,13 @@
-# PlasLR
+<p align="center">
+  <img src="PlasLR_logo.png" width="500" title="Final Labelling" alt="Final Labelling">
+</p>
+
+# PlasLR: Adaptation of Plasmid Prediction for Error-Prone Long Reads
+![GitHub](https://img.shields.io/github/license/anuradhawick/PlasLR)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/anuradhawick/PlasLR)
+
 Adaptation of contig based plasmid classification for error prone long reads (PacBio and ONT) to improved genome assembly
+
 ## Dependencies
 PlasLR is coded purely using C++ (v9) and Python 3.6. To run PlasLR, you will need to install the following python and C++ modules.
 
