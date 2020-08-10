@@ -4,34 +4,43 @@ import os
 import sys
 import time
 
+from plaslr_utils import reads_filter
+from plaslr_utils import plaslr_core
+from plaslr_utils import scan_dsk
+
 start_time = time.time()
 parser = argparse.ArgumentParser(description="""PlasLR Plasmid Classification Corrector""")
 
-parser.add_argument('-r',
-                    metavar='<READS PATH>',
+parser.add_argument('--reads', '-r',
                     help="Reads path (FASTQ)",
                     type=str,
                     required=True)
-parser.add_argument('-t',
-                    metavar='<THREADS>',
+parser.add_argument('--threads', '-t',
                     help="Thread limit",
                     type=int,
                     default=8,
                     required=False)
-parser.add_argument('-i',
+parser.add_argument('--ground-truth',
                     metavar='<IDS>',
                     help="Read ids of reads (For dry runs with ground truth)",
                     type=str,
                     required=False,
                     default=None)   
-parser.add_argument('-b',
+parser.add_argument('--bin-width', '-bw',
                     metavar='<bin width for coverage histograms>',
-                    help="Value of bx32 will be the total coverage of k-mers in the coverage histograms. \
-                        Usually k-mers are shifted towards y-axis due to errors. By defaul b=10; coverages upto 320X",
+                    help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
+                        Usually k-mers are shifted towards y-axis due to errors. By defaul b=2; coverages upto 400X",
                     type=int,
                     required=False,
-                    default=10)                
-parser.add_argument('-m',
+                    default=2)    
+parser.add_argument('--bin-coverage', '-bc',
+                    metavar='<number of bins for coverage histograms>',
+                    help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
+                        Usually k-mers are shifted towards y-axis due to errors. By defaul bc=200; coverages upto 400X",
+                    type=int,
+                    required=False,
+                    default=2)              
+parser.add_argument('--max-mem', '-m',
                     metavar='<Max memory for DSK in Mb>',
                     help="Default 5000. DSK k-mer counter accepts a max memory parameter. However, the complete pipeline requires 5GB+ RAM. \
                         This is only to make DSK step faster, should you have more RAM.",
@@ -42,54 +51,65 @@ parser.add_argument('--resume',
                     action='store_true',
                     help='Continue from the last step or the binning step (which ever comes first). Can save time needed to run DSK and obtain k-mers. Ideal for sensitivity tuning'
                     )                       
-parser.add_argument('-pf',
+parser.add_argument('--plasflow', '-pf',
                     metavar='',
                     help="PlasFlow result tsv",
                     type=str,
                     default=None,
                     required=False)
-parser.add_argument('-pc',
+parser.add_argument('--plasclass', '-pc',
                     metavar='',
                     help="PlasClass result",
                     type=str,
                     default=None,
                     required=False)
-parser.add_argument('-prob_chrom',
-                    help="Chromosome [Default 0.7 for plasclass and 0.5 for plasflow]",
+parser.add_argument('--prob-chrom', '-C',
+                    help="Chromosome [Default Auto Detected for plasclass and 0.5 for plasflow]",
                     type=float,
                     default=None,
                     required=False)
-parser.add_argument('-prob_plas',
+parser.add_argument('--prob-plas', '-P',
                     metavar='',
-                    help="Plasmid Threshold [Default 0.3 for plasclass and 0.7 for plasflow]",
+                    help="Plasmid Threshold [Default Auto Detected for plasclass and 0.7 for plasflow]",
                     type=str,
                     default=None,
                     required=False)
-parser.add_argument('-label_corr',
+parser.add_argument('--plots',
                     action='store_true',
                     help="Whether the initial classifications to be corrected or classify based on already labelled ones")
-parser.add_argument('-plots',
-                    help="Whether the initial classifications to be corrected or classify based on already labelled ones")
-parser.add_argument('-o', metavar='<DEST>', help="Output directory", type=str, required=True)
+parser.add_argument('--output', '-o', help="Output directory", type=str, required=True)
 
 args = parser.parse_args()
 
-readsPath = args.r
-output = args.o
-threads = args.t
-ids = args.i
+reads_path = args.reads
+output = args.output
 resume = args.resume
-bin_size = args.b
-max_ram = max(args.m, 5000)
-checkpointsPath = output + "/checkpoints"
-classification = args.pf
+bin_width = args.bin_width
+bin_coverage = args.bin_coverage
+max_ram = max(args.max_mem, 5000)
+classification = args.plasflow
+truth = args.ground_truth
+threads = args.threads
 prob_plas = args.prob_plas
 prob_chrom = args.prob_chrom
-label_corr = args.label_corr
 plots = args.plots
 
+checkpointsPath = output + "/checkpoints"
+
+# parameter checking
+if not (prob_plas==None and prob_chrom==None) and (prob_plas!=None or prob_chrom!=None):
+    print("In manual mode both prob_plas and prob_chrom must be specified")
+    print("Please consider leaving the values for automatic thrshold setting")
+    print("Program exitting")
+    sys.exit(1)
+
+if args.plasclass != None and args.plasflow != None:
+    print("Must provide only one of -pf or -pc as the input")
+    print("Program exitting")
+    sys.exit(1)
+
 if classification == None:
-    classification = args.pc
+    classification = args.plasclass
 
 if classification == None:
     print("Must provide either -pf or -pc as the input")
@@ -116,19 +136,19 @@ if threads <= 0:
     print("Minimum number of threads is 1. Using thread count 1 and continue")
     threads = 1
 
-if not os.path.isfile(readsPath):
+if not os.path.isfile(reads_path):
     print("Failed to open reads file")
     print("Exitting process. Good Bye!")
     sys.exit(1)
 
-if ids and not os.path.isfile(ids):
+if truth and not os.path.isfile(truth):
     print("Failed to open read ids. Continue without ids")
-    ids = None
+    truth = None
 
 if not os.path.exists(output):
     os.makedirs(output)
 
-if not readsPath.split(".")[-1].lower() in ['fq', 'fasta', 'fa', 'fastq']:
+if not reads_path.split(".")[-1].lower() in ['fq', 'fasta', 'fa', 'fastq']:
     print("Unable to detect file type of reads. Please use either FASTA of FASTQ. Good Bye!")
     sys.exit(1)
 
@@ -138,8 +158,6 @@ def checkProc(ret, n=None):
         print("Failed due to an error. Please check the log. Good Bye!")
         sys.exit(ret)
 
-fileType = readsPath.split(".")[-1].lower()
-
 if resume:
     data = loadCheckpoints()
 
@@ -148,10 +166,10 @@ if resume:
 
 if not resume:
     data = {}
-    data['r'] = readsPath
+    data['r'] = reads_path
     data['o'] = output
     data['t'] = threads
-    data['i'] = ids
+    data['i'] = truth
     data['completed'] = set()
 
     updateCheckpoints(data)
@@ -159,38 +177,22 @@ if not resume:
 if resume and "filtering" not in data['completed'] or not resume:
     # convert reads to filtered fasta
     print("Filtering reads")
-    if fileType in ['fq', 'fastq']:
-        if ids:
-            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fq "{3}" "{2}"/ids.txt """.format(os.path.dirname(__file__), readsPath, output, ids)
-        else:
-            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fq""".format(os.path.dirname(__file__), readsPath, output)
-    else:
-        if ids:
-            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fa "{3}" "{2}"/ids.txt """.format(os.path.dirname(__file__), readsPath, output, ids)
-        else:
-            cmdFilter = """"{0}/bin/filter" "{1}" "{2}/reads.fa" fa""".format(os.path.dirname(__file__), readsPath, output)
-    
-    o = os.system(cmdFilter)
-    checkProc(o, "Filtering reads")
+    try:
+        reads_filter.filter_reads(reads_path, output, plasflow_path=args.plasflow, plasclass_path=args.plasclass, ground_truth_path=args.ground_truth)
+    except Exception as e:
+        print("Failed to filter the reads. Ensure all the paths are correct", e)
+        sys.exit(1)
 
     data['completed'].add('filtering')
     updateCheckpoints(data)
 
 if resume and "dsk" not in data['completed'] or not resume:
     print("Running DSK")
-    cmdDSK = """dsk -verbose 0 -file "{0}/reads.fa" -kmer-size 15 -abundance-min 10 -out-dir "{0}/DSK" -max-memory {1} -nb-cores {2}""".format(output, max_ram, threads)
+    cmdDSK = """dsk -verbose 0 -file "{0}/filtered.fasta" -kmer-size 15 -abundance-min 5 -out-dir "{0}/DSK" -max-memory {1} -nb-cores {2}""".format(output, max_ram, threads)
     o = os.system(cmdDSK)
     checkProc(o, "Running DSK")
 
-    print("Reading DSK output")
-    cmdDSKRead = """python {0}/src/scan-dsk.py {1}/DSK/reads.h5 {1}/DSK/ {2}""".format(os.path.dirname(__file__), output, threads)
-    o = os.system(cmdDSKRead)
-    checkProc(o, "Reading DSK output")
-
-    print("Gathering DSK data")
-    cmdGather = """cat "{0}"/DSK/*.chunk > "{0}/DSK/15mersCounts" """.format(output)
-    o = os.system(cmdGather)
-    checkProc(o, "Gathering DSK data")
+    scan_dsk.scan_dsk(f"{output}/DSK/filtered.h5", threads, f"{output}/DSK")
 
     data['completed'].add('dsk')
     updateCheckpoints(data)
@@ -199,7 +201,7 @@ if resume and "trimers" not in data['completed'] or not resume:
     print("Counting Trimers")
     checkProc(o, "Making directory for profiles")
 
-    cmd = """"{0}/bin/countTrimers" "{1}/reads.fa" "{1}/3mers" {2}""".format(os.path.dirname(__file__), output, threads)
+    cmd = """"{0}/bin/countTrimers" "{1}/filtered.fasta" "{1}/3mers" {2}""".format(os.path.dirname(__file__), output, threads)
     o = os.system(cmd)
     checkProc(o, "Counting Trimers")
 
@@ -208,7 +210,7 @@ if resume and "trimers" not in data['completed'] or not resume:
 
 if resume and "15mers" not in data['completed'] or not resume:
     print("Counting 15-mer profiles")
-    cmd = """"{0}/bin/search15mers" "{1}/DSK/15mersCounts" "{1}/reads.fa" "{1}/15mers" {2} {3}""".format(os.path.dirname(__file__), output, bin_size, threads)
+    cmd = """"{0}/bin/search15mers" "{1}/DSK/15mersCounts" "{1}/filtered.fasta" "{1}/15mers" 15 {2} {3} {4}""".format(os.path.dirname(__file__), output, bin_width, bin_coverage, threads)
     o = os.system(cmd)
     checkProc(o, "Counting 15-mer profiles")
 
@@ -217,25 +219,25 @@ if resume and "15mers" not in data['completed'] or not resume:
 
 
 print("Correcting Plasmid Classification")
-cmd = """python "{0}/src/PlasmidCorrection.py" -p3 {1}/3mers -p15 {1}/15mers -t {2}""".format(os.path.dirname(__file__), output, threads)
 
-if ids:
-    cmd += """ -i "{0}"/ids.txt """.format(output)
+p3 = f"{output}/3mers"
+p15 = f"{output}/15mers"
+if truth:
+    truth = f"{output}/filtered.truth.txt"
+readIds = f"{output}/filtered.ids.txt"
+kmer_counts = f"{output}/DSK/15mersCounts"
 
-if args.pf:
-    cmd += """ -pf "{0}" """.format(classification)
+if args.plasclass:
+    pc = f"{output}/filtered.pc"
+    pf = None
 else:
-    cmd += """ -pc "{0}" """.format(classification)
-if prob_plas:
-    cmd += """ -prob_plas {0} """.format(prob_plas)
-if prob_chrom:
-    cmd += """ -prob_chrom {0} """.format(prob_chrom)
-if label_corr:
-    cmd += """ -label_corr {0} """.format(label_corr)
-if plots:
-    cmd += """ -plots {0} """.format(plots)
-cmd += """ -o "{0}" """.format(output)
+    pc = None
+    pf = f"{output}/filtered.pf"
 
+try:
+    plaslr_core.run_plasmid_correction(p3, p15, readIds, kmer_counts, output, threads=threads, truth=truth, prob_plas=prob_plas, prob_chrom=prob_plas, plasclass=pc, plasflow=pf, plots=plots)
+except Exception as e:
+    print("Failed to execute PlasLR core!", e)
+    sys.exit(1)
 
-o = os.system(cmd)
-checkProc(o, "Correcting Plasmid Classification")
+print("Program Finished!. Please find the output in final.txt")

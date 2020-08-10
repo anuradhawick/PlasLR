@@ -6,7 +6,7 @@
 
 using namespace std;
 
-u_int64_t revComp(u_int64_t x, size_t sizeKmer=15)
+u_int64_t revComp(u_int64_t x, size_t sizeKmer)
 {
     u_int64_t res = x;
 
@@ -44,7 +44,7 @@ vector<long> splitLine(string &line)
     return vec;
 }
 
-long readKmerFile(string filename, vector<u_int32_t> &kmers)
+long readKmerFile(string filename, vector<u_int32_t> &kmers, size_t sizeKmer)
 {
     ifstream myfile(filename);
     string line;
@@ -54,7 +54,7 @@ long readKmerFile(string filename, vector<u_int32_t> &kmers)
     {
         v = splitLine(line);
         kmers[v[0]] = v[1];
-        kmers[revComp(v[0])] = v[1];
+        kmers[revComp(v[0], sizeKmer)] = v[1];
         count ++;
     }
 
@@ -63,14 +63,14 @@ long readKmerFile(string filename, vector<u_int32_t> &kmers)
     return count;
 }
 
-double *processLine(string &line, vector<u_int32_t> &allKmers, long bin_size = 10)
+double *processLine(string &line, vector<u_int32_t> &allKmers, long bin_size, long bins)
 {
-    double *counts = new double[32];
+    double *counts = new double[bins];
     long sum = 0, count, pos, len = 0;
     u_int64_t val = 0;
 
     // to avoid garbage memory
-    for (int i = 0; i < 32; i++)
+    for (int i = 0; i < bins; i++)
     {
         counts[i] = 0;
     }
@@ -101,7 +101,7 @@ double *processLine(string &line, vector<u_int32_t> &allKmers, long bin_size = 1
                 counts[0]++;
                 
             }
-            else if (pos < 32 && pos > 0)
+            else if (pos < bins && pos > 0)
             {
                 counts[pos]++;
             }
@@ -109,26 +109,26 @@ double *processLine(string &line, vector<u_int32_t> &allKmers, long bin_size = 1
         }
     }
 
-    for (int i = 0; i < 32; i++)
-    {
-        counts[i] /= sum;
-        if (counts[i] <  1e-4)
-        {
-            counts[i] = 0;
-        }
-    }
+    // for (int i = 0; i < 32; i++)
+    // {
+    //     counts[i] /= sum;
+    //     if (counts[i] <  1e-4)
+    //     {
+    //         counts[i] = 0;
+    //     }
+    // }
 
     return counts;
 }
 
-void processLinesBatch(vector<string> &linesBatch, vector<u_int32_t> &allKmers, string &outputPath, int threads, long bin_size = 10)
+void processLinesBatch(vector<string> &linesBatch, vector<u_int32_t> &allKmers, string &outputPath, int threads, long bin_size, long bins)
 {
     vector<double *> batchAnswers(linesBatch.size());
 
     #pragma omp parallel for num_threads(threads) schedule(dynamic, 1)
     for (u_int64_t i = 0; i < linesBatch.size(); i++)
     {
-        batchAnswers[i] = processLine(linesBatch[i], allKmers, bin_size);
+        batchAnswers[i] = processLine(linesBatch[i], allKmers, bin_size, bins);
     }
 
     ofstream output;
@@ -137,11 +137,11 @@ void processLinesBatch(vector<string> &linesBatch, vector<u_int32_t> &allKmers, 
 
     for (u_int64_t i = 0; i < linesBatch.size(); i++)
     {
-        for (int j = 0; j < 32; j++)
+        for (int j = 0; j < bins; j++)
         {
             results += to_string(batchAnswers[i][j]);
 
-            if (j < 32 - 1)
+            if (j < bins - 1)
             {
                 results += " ";
             }
@@ -163,27 +163,27 @@ int main(int argc, char ** argv)
     vector<u_int32_t> kmers(1073741824, 0);    
     vector<string> batch;
     long lineNum = 0, count;
-
     string kmersFile =  argv[1];
+    string inputPath =  argv[2];
+    string outputPath =  argv[3];
+    size_t sizeKmer = stoi(argv[4]);
+    int bin_size =  stoi(argv[5]);
+    int bins =  stoi(argv[6]);
+    int threads = stoi(argv[7]);
+    
+    
     cout << "K-Mer file " << kmersFile << endl;
 
     cout << "LOADING KMERS TO RAM" << endl;
-    count = readKmerFile(kmersFile, kmers);
+    count = readKmerFile(kmersFile, kmers, sizeKmer);
 
     cout << "FINISHED LOADING KMERS TO RAM " << count << endl;
-
-    string inputPath =  argv[2];
-    string outputPath =  argv[3];
-    int bin_size =  max(stoi(argv[4]), 10);
-    int threads = 8;
-
-    if (argv[4] != NULL) 
-        threads = stoi(argv[5]);
 
     cout << "INPUT FILE " << inputPath << endl;
     cout << "OUTPUT FILE " << outputPath << endl;
     cout << "THREADS " << threads << endl;
     cout << "BIN WIDTH " << bin_size << endl;
+    cout << "BINS " << bins << endl;
 
     ifstream myfile(inputPath);
     string line;
@@ -208,11 +208,11 @@ int main(int argc, char ** argv)
 
         if (batch.size() == 100000)
         {
-            processLinesBatch(batch, kmers, outputPath, threads, bin_size);
+            processLinesBatch(batch, kmers, outputPath, threads, bin_size, bins);
             batch.clear();
         }
     }
-    processLinesBatch(batch, kmers, outputPath, threads);
+    processLinesBatch(batch, kmers, outputPath, threads, bin_size, bins);
 
     myfile.close();
     batch.clear();
