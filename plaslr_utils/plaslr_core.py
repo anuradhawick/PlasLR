@@ -110,7 +110,7 @@ def get_best_bins(size_hist, kmers):
     
     bins_o = np.zeros(size_hist)
     
-    for count in kmers:
+    for count in tqdm(kmers, desc='Building kmer histogram'):
         if 0 < count < len(bins_o):
             bins_o[count] += 1
     
@@ -128,7 +128,7 @@ def get_best_bins(size_hist, kmers):
             best_threshold = t
             best_bins = bins
             
-    return best_threshold, best_bins
+    return best_threshold, best_flux
 
 def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, truth=None, prob_plas=None, prob_chrom=None, plots=False, plasclass=None, plasflow=None):
     if plots and not os.path.isdir(f"{output}/images/"):
@@ -188,7 +188,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
 
         logger.info("Computing the kmer counts thresholds.")
         threshold, bins = get_best_bins(size_hist, filtered_kmers)
-        logger.debug(f"Threshold selected = {threshold}, Number of coverage bins visible = {len(bins)}")
+        logger.debug(f"Threshold selected = {threshold}, Number of coverage bins visible = {bins}")
         logger.info("Computing the kmer counts thresholds.")
 
         data_binarised = np.where(p15>threshold, 1, 0)
@@ -305,13 +305,11 @@ if __name__ == '__main__':
                         default=None,
                         required=False)
     parser.add_argument('--ground-truth',
-                        metavar='',
                         help="Read ids of reads (For dry runs with ground truth)",
                         type=str,
                         default=None,
                         required=False)
     parser.add_argument('--read-ids', '-r',
-                        metavar='',
                         help="Read ids of reads (For dry runs with ground truth)",
                         type=str,
                         default=None,
