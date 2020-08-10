@@ -16,6 +16,8 @@ PlasLR is coded purely using C++ (v9) and Python 3.6. To run PlasLR, you will ne
 * scipy 1.3.0 
 * seaborn 0.9.0
 * h5py 2.9.0
+* tqdm 4.7
+* tabulate 0.8
 
 ### C++ requirements
 * GCC version 9.1.0
@@ -41,37 +43,46 @@ sh build.sh
 
 ## Note on Probability Thresholds
 
-PlasLR intends to pick the most accurate classification by either PlasClass or PlasFlow (to date). Users can set the thresholds for selection of plasmids and chromosomes.
+PlasLR intends to pick the most accurate classification by either PlasClass or PlasFlow. Users can set the thresholds for selection of plasmids and chromosomes.
 
 * Case: PlasClass
 
-    PlasClass outputs single probability values. Therefore, above `prob_plas` will be plasmids and below `prob_chrom` will be the chromosomes.
+    PlasClass outputs single probability values. Therefore, above `prob_plas` will be plasmids and below `prob_chrom` will be the chromosomes. We recommend leaving these two parameters unspecified so that they can be estimated by PlasLR.
 
 * Case: PlasFlow
 
-    PlasFlow output probabilities under several plasmid and chromosome classes under their phylum. Therefore, the `prob_chrom` and `prob_plas` will be the thresholds for each class. Reads below these thresholds will be treated as unclassified.
+    PlasFlow output probabilities under several plasmid and chromosome classes under their phylum. Therefore, the `prob_chrom` and `prob_plas` will be the thresholds for each class. Reads below these thresholds will be treated as unclassified. We recommend leaving these two parameters unspecified so that they can be estimated by PlasLR.
 
 ## Running Program
 
 ```
-usage: PlasLR [-h] -r <READS PATH> [-t <THREADS>] [-i <IDS>]
-              [-b <bin width for coverage histograms>]
-              [-m <Max memory for DSK in Mb>] [--resume] [-pf] [-pc]
-              [-prob_chrom] [-prob_plas] [-label_corr] [-plots] -o <DEST>
+usage: PlasLR [-h] --reads READS [--threads THREADS] [--ground-truth <IDS>]
+              [--bin-width <bin width for coverage histograms>]
+              [--bin-coverage <number of bins for coverage histograms>]
+              [--max-mem <Max memory for DSK in Mb>] [--resume] [--plasflow]
+              [--plasclass] [--prob-chrom PROB_CHROM] [--prob-plas] [--plots]
+              --output OUTPUT
 
 PlasLR Plasmid Classification Corrector
 
 optional arguments:
   -h, --help            show this help message and exit
-  -r <READS PATH>       Reads path (FASTQ)
-  -t <THREADS>          Thread limit
-  -i <IDS>              Read ids of reads (For dry runs with ground truth)
-  -b <bin width for coverage histograms>
-                        Value of bx32 will be the total coverage of k-mers in
+  --reads READS, -r READS
+                        Reads path (FASTQ)
+  --threads THREADS, -t THREADS
+                        Thread limit
+  --ground-truth <IDS>  Read ids of reads (For dry runs with ground truth)
+  --bin-width <bin width for coverage histograms>, -bw <bin width for coverage histograms>
+                        Value of bw*bs will be the total coverage of k-mers in
                         the coverage histograms. Usually k-mers are shifted
-                        towards y-axis due to errors. By defaul b=10;
-                        coverages upto 320X
-  -m <Max memory for DSK in Mb>
+                        towards y-axis due to errors. By defaul b=2; coverages
+                        upto 400X
+  --bin-coverage <number of bins for coverage histograms>, -bc <number of bins for coverage histograms>
+                        Value of bw*bs will be the total coverage of k-mers in
+                        the coverage histograms. Usually k-mers are shifted
+                        towards y-axis due to errors. By defaul bc=200;
+                        coverages upto 400X
+  --max-mem <Max memory for DSK in Mb>, -m <Max memory for DSK in Mb>
                         Default 5000. DSK k-mer counter accepts a max memory
                         parameter. However, the complete pipeline requires
                         5GB+ RAM. This is only to make DSK step faster, should
@@ -79,17 +90,17 @@ optional arguments:
   --resume              Continue from the last step or the binning step (which
                         ever comes first). Can save time needed to run DSK and
                         obtain k-mers. Ideal for sensitivity tuning
-  -pf                   PlasFlow result tsv
-  -pc                   PlasClass result
-  -prob_chrom           Chromosome [Default 0.7 for plasclass and 0.5 for
-                        plasflow]
-  -prob_plas            Plasmid Threshold [Default 0.3 for plasclass and 0.7
-                        for plasflow]
-  -label_corr           Whether the initial classifications to be corrected or
+  --plasflow , -pf      PlasFlow result tsv
+  --plasclass , -pc     PlasClass result
+  --prob-chrom PROB_CHROM, -C PROB_CHROM
+                        Chromosome [Default Auto Detected for plasclass and
+                        0.5 for plasflow]
+  --prob-plas , -P      Plasmid Threshold [Default Auto Detected for plasclass
+                        and 0.7 for plasflow]
+  --plots               Whether the initial classifications to be corrected or
                         classify based on already labelled ones
-  -plots                Whether the initial classifications to be corrected or
-                        classify based on already labelled ones
-  -o <DEST>             Output directory
+  --output OUTPUT, -o OUTPUT
+                        Output directory
 ```
 
 ## Issues
