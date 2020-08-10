@@ -10,8 +10,8 @@ echo `g++ -v`
 mkdir bin
 
 echo "BUILDING THE PlasLR 15 MER COMPUTATIONS"
-g++ src/search-15mers.cpp -fopenmp -Wall -o bin/search15mers
+g++ plaslr_utils/search-15mers.cpp -fopenmp -Wall -o bin/search15mers
 echo "BUILDING THE PlasLR 3 MER COMPUTATIONS"
-g++ src/count-tri.cpp -Wall -fopenmp -o bin/countTrimers
+g++ plaslr_utils/count-tri.cpp -Wall -fopenmp -o bin/countTrimers
 
 echo "BUILD FINISHED"

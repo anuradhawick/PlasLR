@@ -2,6 +2,7 @@ import numpy as np
 import argparse
 import os
 import sys
+import logging
 
 from tqdm import tqdm
 
@@ -20,6 +21,8 @@ from sklearn.metrics.cluster import adjusted_rand_score
 
 from tabulate import tabulate
 
+logger = logging.getLogger('PlasLR')
+
 palette ={"Plasmid":"C0","Chromosome":"C1", "plasmid":"C0","chromosome":"C1","unclassified":"C2"}
 
 plt.rcParams.update({'font.size': 16})    
@@ -29,8 +32,11 @@ def eval_performance(truth, clusters):
     truth = list(map(lambda x: x.lower(), truth))
     clusters = list(map(lambda x: x.lower(), clusters))
     
-    print("Plasmids   ", truth.count("plasmid"))
-    print("Chromosomes", truth.count("chromosome"))
+    plasmid_count = truth.count("plasmid")
+    chromosome_count = truth.count("chromosome")
+    
+    str_output = f"\nPlasmids    = {plasmid_count: 10}\n"
+    str_output += f"Chromosomes = {chromosome_count: 10}\n\n"
     
     truth = np.array(truth)
     clusters = np.array(clusters)
@@ -60,16 +66,19 @@ def eval_performance(truth, clusters):
             else:
                 p_as_u+=1
                 
-    print(tabulate([["Chromosome",c_as_c, c_as_p, c_as_u],
+    str_output += tabulate([["Chromosome",c_as_c, c_as_p, c_as_u],
                     ["Plasmid",p_as_c, p_as_p, p_as_u]], 
-                   headers=["", "Chromosome", "Plasmid", "Unclassified"], tablefmt="fancy_grid"))
-    
+                   headers=["", "Chromosome", "Plasmid", "Unclassified"], tablefmt="fancy_grid")
+    str_output += "\n\n"
     pr = precision_score(classified_truths, classified_clusters, average='micro')
     re = recall_score(truth, clusters, average='micro')
     f1 = 2*pr*re/(pr+re)
-    print("Precision   ", pr)
-    print("Recall      ", re)
-    print("F1 Score    ", f1)
+    str_output += f"Precision   = {(100*pr):3.2f}\n"
+    str_output += f"Recall      = {(100*re):3.2f}\n"
+    str_output += f"F1 Score    = {(100*f1):3.2f}\n"
+    
+    
+    return str_output
 
 def get_thresholds(probs):
     total_reads = len(probs)
@@ -118,7 +127,6 @@ def get_best_bins(size_hist, kmers):
             best_flux = flux
             best_threshold = t
             best_bins = bins
-            print(best_threshold, flux)
             
     return best_threshold, best_bins
 
@@ -128,6 +136,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
 
     if plasclass:
         lines = 0
+        logger.info("Loading the data.")
         with open(plasclass) as pc_file:
             for line in pc_file:
                 lines += 1
@@ -143,7 +152,9 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
         p3 = np.array([[float(y) for y in line.strip().split()] for line in tqdm(open(p3), total=lines, desc="Loading composition profiles")])
         p15 = np.array([[float(y) for y in line.strip().split()] for line in tqdm(open(p15), total=lines, desc="Loading coverage profiles")])
         readIds = np.array([line.strip() for line in tqdm(open(readIds), total=lines, desc="Loading read ids")])
+        logger.info("Finish loading the data.")
 
+        logger.info("Loading the kmer counts data.")
         kmers = []
         kmers_count = 0
         with open(kmer_counts) as kmer_file:
@@ -157,8 +168,14 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                 kmers.append(int(line.split(",")[-1]))
                 pbar.update(1)
         pbar.close()
+        logger.info("Finish loading the kmer counts data.")
 
+
+        logger.info("Computing the probability thresholds.")
         lower_thresh, upper_thresh = get_thresholds(probs)
+        logger.debug(f"Lower threshold = {lower_thresh} Upper threshold = {upper_thresh}")
+        logger.info("Finish computing the probability thresholds.")
+
         classification = np.array(list(map(lambda x: "plasmid" if x > upper_thresh else ("chromosome" if x < lower_thresh else "unclassified"), probs)))
         
         filtered_kmers = []
@@ -168,7 +185,12 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                 filtered_kmers.append(kmer)
 
         size_hist = 500
-        threshold, bins = get_best_bins(size_hist, kmers)
+
+        logger.info("Computing the kmer counts thresholds.")
+        threshold, bins = get_best_bins(size_hist, filtered_kmers)
+        logger.debug(f"Threshold selected = {threshold}, Number of coverage bins visible = {len(bins)}")
+        logger.info("Computing the kmer counts thresholds.")
+
         data_binarised = np.where(p15>threshold, 1, 0)
 
         profiles = PCA(n_components=2).fit_transform(StandardScaler().fit_transform(np.concatenate([data_binarised, p3], axis=1)))
@@ -230,6 +252,9 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
         unclassified_profiles = profiles[classification_corrected=="unclassified"]
         unclassified_readIds = readIds[classification_corrected=="unclassified"]
 
+        logger.debug(f"Classified data size = {len(classified_labels)}")
+        logger.debug(f"Unclassified data size = {len(unclassified_labels)}")
+
         knn_clf = KNeighborsClassifier(100, weights='uniform')
         trained_model = knn_clf.fit(classified_profiles, classified_labels)
 
@@ -244,7 +269,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
             unclassified_truth = truth[classification_corrected=="unclassified"]
             all_truth = np.append(classified_truth, unclassified_truth, axis=0)
 
-            eval_performance(all_truth, all_labels)
+            logger.info(eval_performance(all_truth, all_labels))
         
         if plots and truth is not None:
             fig = plt.figure(figsize=(20, 10))

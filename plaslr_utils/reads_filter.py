@@ -1,7 +1,10 @@
 import argparse 
 import sys
+import logging
 
 from Bio import SeqIO
+
+logger = logging.getLogger('PlasLR')
 
 def filter_reads(reads_path, output, *,plasflow_path=None, plasclass_path=None, ground_truth_path=None):
     extension = reads_path.split(".")[-1]
@@ -74,7 +77,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.plasclass==None and args.plasflow==None:
-        print("Atleast one tool's result must be provided")
+        logger.error("Atleast one tool's result must be provided")
         sys.exit(1)
 
     filter_reads(args.input, args.output, plasflow_path=args.plasflow, plasclass_path=args.plasclass, ground_truth_path=args.ground_truth)

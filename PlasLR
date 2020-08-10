@@ -3,10 +3,21 @@ import argparse
 import os
 import sys
 import time
+import logging
 
 from plaslr_utils import reads_filter
 from plaslr_utils import plaslr_core
 from plaslr_utils import scan_dsk
+
+logger = logging.getLogger('PlasLR')
+logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+consoleHeader = logging.StreamHandler()
+consoleHeader.setFormatter(formatter)
+consoleHeader.setLevel(logging.INFO)
+logger.addHandler(consoleHeader)
+
 
 start_time = time.time()
 parser = argparse.ArgumentParser(description="""PlasLR Plasmid Classification Corrector""")
@@ -98,22 +109,22 @@ checkpointsPath = output + "/checkpoints"
 
 # parameter checking
 if not (prob_plas==None and prob_chrom==None) and (prob_plas!=None or prob_chrom!=None):
-    print("In manual mode both prob_plas and prob_chrom must be specified")
-    print("Please consider leaving the values for automatic thrshold setting")
-    print("Program exitting")
+    logger.error("In manual mode both prob_plas and prob_chrom must be specified")
+    logger.error("Please consider leaving the values for automatic thrshold setting")
+    logger.error("Program exitting")
     sys.exit(1)
 
 if args.plasclass != None and args.plasflow != None:
-    print("Must provide only one of -pf or -pc as the input")
-    print("Program exitting")
+    logger.error("Must provide only one of -pf or -pc as the input")
+    logger.error("Program exitting")
     sys.exit(1)
 
 if classification == None:
     classification = args.plasclass
 
 if classification == None:
-    print("Must provide either -pf or -pc as the input")
-    print("Program exitting")
+    logger.error("Must provide either -pf or -pc as the input")
+    logger.error("Program exitting")
     sys.exit(1)
 
 def updateCheckpoints(newChecks):
@@ -122,7 +133,7 @@ def updateCheckpoints(newChecks):
 
 def loadCheckpoints():
     if not os.path.isfile(checkpointsPath):
-        print("No checkpoints from previous runs available")
+        logger.error("No checkpoints from previous runs available")
         return False
     else:
         with open(checkpointsPath, "r") as f:
@@ -133,29 +144,29 @@ def loadCheckpoints():
 
 # Validation of inputs
 if threads <= 0:
-    print("Minimum number of threads is 1. Using thread count 1 and continue")
+    logger.error("Minimum number of threads is 1. Using thread count 1 and continue")
     threads = 1
 
 if not os.path.isfile(reads_path):
-    print("Failed to open reads file")
-    print("Exitting process. Good Bye!")
+    logger.error("Failed to open reads file")
+    logger.error("Exitting process. Good Bye!")
     sys.exit(1)
 
 if truth and not os.path.isfile(truth):
-    print("Failed to open read ids. Continue without ids")
+    logger.error("Failed to open read ids. Continue without ids")
     truth = None
 
 if not os.path.exists(output):
     os.makedirs(output)
 
 if not reads_path.split(".")[-1].lower() in ['fq', 'fasta', 'fa', 'fastq']:
-    print("Unable to detect file type of reads. Please use either FASTA of FASTQ. Good Bye!")
+    logger.error("Unable to detect file type of reads. Please use either FASTA of FASTQ. Good Bye!")
     sys.exit(1)
 
 def checkProc(ret, n=None):
     if ret != 0:
-        if n: print("Error in step:", n)
-        print("Failed due to an error. Please check the log. Good Bye!")
+        if n: logger.error("Error in step:", n)
+        logger.error("Failed due to an error. Please check the log. Good Bye!")
         sys.exit(ret)
 
 if resume:
@@ -174,51 +185,65 @@ if not resume:
 
     updateCheckpoints(data)
 
+fileHandler = logging.FileHandler(f"{output}/plaslr.log")
+fileHandler.setLevel(logging.DEBUG)
+fileHandler.setFormatter(formatter)
+logger.addHandler(fileHandler)
+
 if resume and "filtering" not in data['completed'] or not resume:
     # convert reads to filtered fasta
-    print("Filtering reads")
+    logger.info("Filtering reads")
     try:
         reads_filter.filter_reads(reads_path, output, plasflow_path=args.plasflow, plasclass_path=args.plasclass, ground_truth_path=args.ground_truth)
     except Exception as e:
-        print("Failed to filter the reads. Ensure all the paths are correct", e)
+        logger.error("Failed to filter the reads. Ensure all the paths are correct", e)
         sys.exit(1)
-
+    logger.info("Filtering completed")
+    
     data['completed'].add('filtering')
     updateCheckpoints(data)
 
 if resume and "dsk" not in data['completed'] or not resume:
-    print("Running DSK")
+    logger.info("Running DSK")
     cmdDSK = """dsk -verbose 0 -file "{0}/filtered.fasta" -kmer-size 15 -abundance-min 5 -out-dir "{0}/DSK" -max-memory {1} -nb-cores {2}""".format(output, max_ram, threads)
     o = os.system(cmdDSK)
     checkProc(o, "Running DSK")
 
+    logger.info("Running DSK completed")
+
+    logger.info("DSK postprocessing")
     scan_dsk.scan_dsk(f"{output}/DSK/filtered.h5", threads, f"{output}/DSK")
+    logger.info("DSK postprocessing completed")
 
     data['completed'].add('dsk')
     updateCheckpoints(data)
 
 if resume and "trimers" not in data['completed'] or not resume:
-    print("Counting Trimers")
+    logger.info("Counting trimers")
     checkProc(o, "Making directory for profiles")
 
     cmd = """"{0}/bin/countTrimers" "{1}/filtered.fasta" "{1}/3mers" {2}""".format(os.path.dirname(__file__), output, threads)
     o = os.system(cmd)
-    checkProc(o, "Counting Trimers")
+    checkProc(o, "Counting trimers")
+
+    logger.info("Counting trimers completed")
 
     data['completed'].add('trimers')
     updateCheckpoints(data)
 
 if resume and "15mers" not in data['completed'] or not resume:
-    print("Counting 15-mer profiles")
+    logger.info("Counting 15-mer profiles")
     cmd = """"{0}/bin/search15mers" "{1}/DSK/15mersCounts" "{1}/filtered.fasta" "{1}/15mers" 15 {2} {3} {4}""".format(os.path.dirname(__file__), output, bin_width, bin_coverage, threads)
     o = os.system(cmd)
     checkProc(o, "Counting 15-mer profiles")
+
+    logger.info("Counting 15-mer profiles completed")
 
     data['completed'].add('15mers')
     updateCheckpoints(data)
 
 
-print("Correcting Plasmid Classification")
+logger.info("Correcting Plasmid Classification")
 
 p3 = f"{output}/3mers"
 p15 = f"{output}/15mers"
@@ -237,7 +262,9 @@ else:
 try:
     plaslr_core.run_plasmid_correction(p3, p15, readIds, kmer_counts, output, threads=threads, truth=truth, prob_plas=prob_plas, prob_chrom=prob_plas, plasclass=pc, plasflow=pf, plots=plots)
 except Exception as e:
-    print("Failed to execute PlasLR core!", e)
+    logger.error("Failed to execute PlasLR core!", e)
     sys.exit(1)
 
-print("Program Finished!. Please find the output in final.txt")
+logger.info("Program Finished!. Please find the output in final.txt")
+logger.removeHandler(fileHandler)
+logger.removeHandler(consoleHeader)
