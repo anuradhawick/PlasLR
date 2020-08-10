@@ -103,6 +103,20 @@ optional arguments:
                         Output directory
 ```
 
+## Running PlasLR on Test Data
+
+```
+cd test_data
+tar -xvf data.tar.gz 
+
+python ../PlasLR -r reads.fasta -t 8 --ground-truth truth.txt -pc pc -o plaslr_output --plots
+
+```
+
+## Notes
+
+* We recommend not to use plots argument if you're running on a larger dataset (More than 100000 reads). As it might make the execution take a longer time. 
+
 ## Issues
 
 Please submit issues on the github repo. Thanks for using PlasLR.
