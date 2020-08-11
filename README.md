@@ -71,13 +71,13 @@ optional arguments:
                         Reads path (FASTQ)
   --threads THREADS, -t THREADS
                         Thread limit
-  --ground-truth <IDS>  Read ids of reads (For dry runs with ground truth)
+  --ground-truth GROUND_TRUTH, -g GROUND_TRUTH  Read ids of reads (For dry runs with ground truth)
   --bin-width <bin width for coverage histograms>, -bw <bin width for coverage histograms>
                         Value of bw*bs will be the total coverage of k-mers in
                         the coverage histograms. Usually k-mers are shifted
                         towards y-axis due to errors. By defaul b=2; coverages
                         upto 400X
-  --bin-coverage <number of bins for coverage histograms>, -bc <number of bins for coverage histograms>
+  --bin-coverage BIN_WIDTH, -bc BIN_WIDTH
                         Value of bw*bs will be the total coverage of k-mers in
                         the coverage histograms. Usually k-mers are shifted
                         towards y-axis due to errors. By defaul bc=200;

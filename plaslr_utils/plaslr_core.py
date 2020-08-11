@@ -209,7 +209,8 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                 plt.savefig(f"{output}/images/figure.classification.png", dpi=100, format="png")
 
         # preliminary label removal of non-confident ones
-        nbrs = NearestNeighbors(n_neighbors=10, algorithm='ball_tree').fit(profiles)
+        neighbours = 50
+        nbrs = NearestNeighbors(n_neighbors=neighbours, algorithm='ball_tree').fit(profiles)
         distances, indices = nbrs.kneighbors(profiles)
 
         classification_corrected = list(classification)
@@ -231,7 +232,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                     _vote += 1
                 _all_votes += 1
 
-            if _vote/max(_all_votes, 1) < 0.3:
+            if _vote/max(_all_votes, 1) < 0.3 and _all_votes > neighbours * 0.3:
                 classification_corrected[i[0]] = "unclassified"
         classification_corrected = np.array(classification_corrected)
         
@@ -255,7 +256,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
         logger.debug(f"Classified data size = {len(classified_labels)}")
         logger.debug(f"Unclassified data size = {len(unclassified_labels)}")
 
-        knn_clf = KNeighborsClassifier(100, weights='uniform')
+        knn_clf = KNeighborsClassifier(neighbours, weights='distance', n_jobs=threads)
         trained_model = knn_clf.fit(classified_profiles, classified_labels)
 
         predicted_labels = trained_model.predict(unclassified_profiles)

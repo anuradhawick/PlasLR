@@ -31,14 +31,12 @@ parser.add_argument('--threads', '-t',
                     type=int,
                     default=8,
                     required=False)
-parser.add_argument('--ground-truth',
-                    metavar='<IDS>',
+parser.add_argument('--ground-truth', '-g',
                     help="Read ids of reads (For dry runs with ground truth)",
                     type=str,
                     required=False,
                     default=None)   
 parser.add_argument('--bin-width', '-bw',
-                    metavar='<bin width for coverage histograms>',
                     help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
                         Usually k-mers are shifted towards y-axis due to errors. By defaul b=2; coverages upto 400X",
                     type=int,
@@ -50,7 +48,7 @@ parser.add_argument('--bin-coverage', '-bc',
                         Usually k-mers are shifted towards y-axis due to errors. By defaul bc=200; coverages upto 400X",
                     type=int,
                     required=False,
-                    default=2)              
+                    default=200)              
 parser.add_argument('--max-mem', '-m',
                     metavar='<Max memory for DSK in Mb>',
                     help="Default 5000. DSK k-mer counter accepts a max memory parameter. However, the complete pipeline requires 5GB+ RAM. \
@@ -265,6 +263,10 @@ except Exception as e:
     logger.error("Failed to execute PlasLR core!", e)
     sys.exit(1)
 
+end_time = time.time()
+time_taken = end_time - start_time
 logger.info("Program Finished!. Please find the output in final.txt")
+logger.info(f"Total time consumed = {time_taken:10.2f} seconds")
+
 logger.removeHandler(fileHandler)
 logger.removeHandler(consoleHeader)
