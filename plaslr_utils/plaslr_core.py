@@ -210,7 +210,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
 
         # preliminary label removal of non-confident ones
         neighbours = 50
-        nbrs = NearestNeighbors(n_neighbors=neighbours, algorithm='ball_tree').fit(profiles)
+        nbrs = NearestNeighbors(n_neighbors=neighbours, algorithm='ball_tree', n_jobs=threads).fit(profiles)
         distances, indices = nbrs.kneighbors(profiles)
 
         classification_corrected = list(classification)
@@ -270,6 +270,9 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
             unclassified_truth = truth[classification_corrected=="unclassified"]
             all_truth = np.append(classified_truth, unclassified_truth, axis=0)
 
+            logger.info("Performance before PlasLR correction and classification")
+            logger.info(eval_performance(truth, classification))
+            logger.info("Performance before PlasLR correction and classification")
             logger.info(eval_performance(all_truth, all_labels))
         
         if plots and truth is not None:
@@ -284,9 +287,11 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
             sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_labels, palette=palette, alpha=0.1)
             plt.savefig(f"{output}/images/figure.final.png", dpi=100, format="png")
 
+        logger.info(f"Writing results to {output}/final.txt")
         with open(f"{output}/final.txt", "w+") as final_result:
-            for readId, label in zip(all_read_ids, all_labels):
+            for readId, label in tqdm(zip(all_read_ids, all_labels), desc='Writing results', total=len(all_read_ids)):
                 final_result.write(f"{readId}\t{label}\n")
+        logger.info(f"Writing results to {output}/final.txt completed")
 
     elif plasflow:
         pass    
