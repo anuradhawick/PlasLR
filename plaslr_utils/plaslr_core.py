@@ -172,7 +172,11 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
 
 
         logger.info("Computing the probability thresholds.")
-        lower_thresh, upper_thresh = get_thresholds(probs)
+        if plasclass is not None:
+            lower_thresh, upper_thresh = 0.5, 0.8
+        else:
+            lower_thresh, upper_thresh = 0.5, 0.7
+        # TODO tune later; lower_thresh, upper_thresh = get_thresholds(probs)
         logger.debug(f"Lower threshold = {lower_thresh} Upper threshold = {upper_thresh}")
         logger.info("Finish computing the probability thresholds.")
 
