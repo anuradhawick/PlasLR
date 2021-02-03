@@ -41,14 +41,14 @@ parser.add_argument('--bin-width', '-bw',
                         Usually k-mers are shifted towards y-axis due to errors. By defaul b=2; coverages upto 400X",
                     type=int,
                     required=False,
-                    default=2)    
+                    default=10)    
 parser.add_argument('--bin-coverage', '-bc',
                     metavar='<number of bins for coverage histograms>',
                     help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
                         Usually k-mers are shifted towards y-axis due to errors. By defaul bc=200; coverages upto 400X",
                     type=int,
                     required=False,
-                    default=200)              
+                    default=32)              
 parser.add_argument('--max-mem', '-m',
                     metavar='<Max memory for DSK in Mb>',
                     help="Default 5000. DSK k-mer counter accepts a max memory parameter. However, the complete pipeline requires 5GB+ RAM. \
