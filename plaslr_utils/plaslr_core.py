@@ -84,7 +84,7 @@ def eval_performance(truth, clusters):
 def get_thresholds(probs):
     total_reads = len(probs)
 
-    for t in np.arange(0.99, 0.7, -0.01):
+    for t in np.arange(0.90, 0.7, -0.01):
         t = round(t, 2)
         percentage_plas = sum(np.where(probs > t, 1, 0))/total_reads * 100
 
