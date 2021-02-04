@@ -76,6 +76,7 @@ def eval_performance(truth, clusters):
     str_output += f"Precision   = {(100*pr):3.2f}\n"
     str_output += f"Recall      = {(100*re):3.2f}\n"
     str_output += f"F1 Score    = {(100*f1):3.2f}\n"
+    str_output += f"Recovery    = {(100*p_as_p/(p_as_p + p_as_c + p_as_u)):3.2f}\n"
     
     
     return str_output
@@ -145,7 +146,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
             probs = [float(line.strip().split("\t")[-1]) for line in tqdm(pc_file, total=lines, desc="Loading plasclass results")]
 
         probs = np.array(probs)
-        probs = np.array(probs)
+
         if truth is not None:
             truth = np.array([line.strip().replace(">", "") for line in tqdm(open(truth), total=lines, desc="Loading ground truth")])
 
@@ -154,50 +155,57 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
         readIds = np.array([line.strip() for line in tqdm(open(readIds), total=lines, desc="Loading read ids")])
         logger.info("Finish loading the data.")
 
-        logger.info("Loading the kmer counts data.")
-        kmers = []
-        kmers_count = 0
-        with open(kmer_counts) as kmer_file:
-            for line in kmer_file:
-                kmers_count += 1
+        # logger.info("Loading the kmer counts data.")
+        # kmers = []
+        # kmers_count = 0
+        # with open(kmer_counts) as kmer_file:
+        #     for line in kmer_file:
+        #         kmers_count += 1
             
-            kmer_file.seek(0)
-            pbar = tqdm(total=kmers_count, desc="Loading kmers to RAM")
+        #     kmer_file.seek(0)
+        #     pbar = tqdm(total=kmers_count, desc="Loading kmers to RAM")
             
-            for n, line in enumerate(kmer_file):
-                kmers.append(int(line.split(",")[-1]))
-                pbar.update(1)
-        pbar.close()
-        logger.info("Finish loading the kmer counts data.")
+        #     for n, line in enumerate(kmer_file):
+        #         kmers.append(int(line.split(",")[-1]))
+        #         pbar.update(1)
+        # pbar.close()
+        # logger.info("Finish loading the kmer counts data.")
 
 
         logger.info("Computing the probability thresholds.")
-        if plasclass is not None:
-            lower_thresh, upper_thresh = 0.5, 0.8
+        # if plasclass is not None:
+        #     lower_thresh, upper_thresh = 0.5, 0.8
+        # else:
+        #     lower_thresh, upper_thresh = 0.5, 0.7
+        # TODO tune later; 
+        if prob_chrom is None and prob_plas is None:
+            lower_thresh, upper_thresh = get_thresholds(probs)
         else:
-            lower_thresh, upper_thresh = 0.5, 0.7
-        # TODO tune later; lower_thresh, upper_thresh = get_thresholds(probs)
+            lower_thresh, upper_thresh = prob_chrom, prob_plas
         logger.debug(f"Lower threshold = {lower_thresh} Upper threshold = {upper_thresh}")
-        logger.info("Finish computing the probability thresholds.")
+        # logger.info("Finish computing the probability thresholds.")
 
         classification = np.array(list(map(lambda x: "plasmid" if x > upper_thresh else ("chromosome" if x < lower_thresh else "unclassified"), probs)))
         
-        filtered_kmers = []
+        # filtered_kmers = []
 
-        for kmer in tqdm(kmers, desc="Filtering important k-mers"):
-            if 5 < kmer < 500:
-                filtered_kmers.append(kmer)
+        # for kmer in tqdm(kmers, desc="Filtering important k-mers"):
+        #     if 5 < kmer < 500:
+        #         filtered_kmers.append(kmer)
 
-        size_hist = 500
+        # size_hist = 500
 
-        logger.info("Computing the kmer counts thresholds.")
-        threshold, bins = get_best_bins(size_hist, filtered_kmers)
-        logger.debug(f"Threshold selected = {threshold}, Number of coverage bins visible = {bins}")
-        logger.info("Computing the kmer counts thresholds.")
+        # logger.info("Computing the kmer counts thresholds.")
 
-        data_binarised = np.where(p15>threshold, 1, 0)
 
-        profiles = PCA(n_components=2).fit_transform(StandardScaler().fit_transform(np.concatenate([data_binarised, p3], axis=1)))
+
+        # threshold, bins = get_best_bins(size_hist, filtered_kmers)
+        # logger.debug(f"Threshold selected = {threshold}, Number of coverage bins visible = {bins}")
+        # logger.info("Computing the kmer counts thresholds.")
+
+        # data_binarised = np.where(p15>threshold, 1, 0)
+
+        profiles = PCA(n_components=2).fit_transform(np.concatenate([p15, p3], axis=1))
 
         if plots and truth is not None:
             fig = plt.figure(figsize=(20, 10))
@@ -213,8 +221,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                 plt.savefig(f"{output}/images/figure.classification.png", dpi=100, format="png")
 
         # preliminary label removal of non-confident ones
-        neighbours = 50
-        nbrs = NearestNeighbors(n_neighbors=neighbours, algorithm='ball_tree', n_jobs=threads).fit(profiles)
+        nbrs = NearestNeighbors(n_neighbors=50, algorithm='ball_tree', n_jobs=threads).fit(profiles)
         distances, indices = nbrs.kneighbors(profiles)
 
         classification_corrected = list(classification)
@@ -236,7 +243,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                     _vote += 1
                 _all_votes += 1
 
-            if _vote/max(_all_votes, 1) < 0.3 and _all_votes > neighbours * 0.3:
+            if _vote/max(_all_votes, 1) < 0.1 and _all_votes > 30:
                 classification_corrected[i[0]] = "unclassified"
         classification_corrected = np.array(classification_corrected)
         
@@ -260,7 +267,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
         logger.debug(f"Classified data size = {len(classified_labels)}")
         logger.debug(f"Unclassified data size = {len(unclassified_labels)}")
 
-        knn_clf = KNeighborsClassifier(neighbours, weights='distance', n_jobs=threads)
+        knn_clf = KNeighborsClassifier(50, weights='uniform', n_jobs=threads)
         trained_model = knn_clf.fit(classified_profiles, classified_labels)
 
         predicted_labels = trained_model.predict(unclassified_profiles)
