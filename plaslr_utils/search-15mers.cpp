@@ -104,19 +104,23 @@ double *processLine(string &line, vector<u_int32_t> &allKmers, long bin_size, lo
             else if (pos < bins && pos > 0)
             {
                 counts[pos]++;
+            } 
+            else
+            {
+                counts[bins-1]++;
             }
             sum++;          
         }
     }
 
-    // for (int i = 0; i < 32; i++)
-    // {
-    //     counts[i] /= sum;
-    //     if (counts[i] <  1e-4)
-    //     {
-    //         counts[i] = 0;
-    //     }
-    // }
+    for (int i = 0; i < 32; i++)
+    {
+        counts[i] /= sum;
+        if (counts[i] <  1e-4)
+        {
+            counts[i] = 0;
+        }
+    }
 
     return counts;
 }
