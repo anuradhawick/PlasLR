@@ -38,7 +38,7 @@ parser.add_argument('--ground-truth', '-g',
                     default=None)   
 parser.add_argument('--bin-width', '-bw',
                     help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
-                        Usually k-mers are shifted towards y-axis due to errors. By defaul b=2; coverages upto 400X",
+                        Usually k-mers are shifted towards y-axis due to errors. By defaul bw=10.",
                     type=int,
                     required=False,
                     default=10)    

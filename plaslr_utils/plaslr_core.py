@@ -135,177 +135,151 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
     if plots and not os.path.isdir(f"{output}/images/"):
         os.makedirs(f"{output}/images/")
 
+    lines = 0
+    logger.info("Loading the data.")
     if plasclass:
-        lines = 0
-        logger.info("Loading the data.")
         with open(plasclass) as pc_file:
             for line in pc_file:
-                lines += 1
+                if len(line.strip()) > 0:
+                    lines += 1
 
             pc_file.seek(0)
             probs = [float(line.strip().split("\t")[-1]) for line in tqdm(pc_file, total=lines, desc="Loading plasclass results")]
-
-        probs = np.array(probs)
-
-        if truth is not None:
-            truth = np.array([line.strip().replace(">", "") for line in tqdm(open(truth), total=lines, desc="Loading ground truth")])
-
-        p3 = np.array([[float(y) for y in line.strip().split()] for line in tqdm(open(p3), total=lines, desc="Loading composition profiles")])
-        p15 = np.array([[float(y) for y in line.strip().split()] for line in tqdm(open(p15), total=lines, desc="Loading coverage profiles")])
-        readIds = np.array([line.strip() for line in tqdm(open(readIds), total=lines, desc="Loading read ids")])
-        logger.info("Finish loading the data.")
-
-        # logger.info("Loading the kmer counts data.")
-        # kmers = []
-        # kmers_count = 0
-        # with open(kmer_counts) as kmer_file:
-        #     for line in kmer_file:
-        #         kmers_count += 1
-            
-        #     kmer_file.seek(0)
-        #     pbar = tqdm(total=kmers_count, desc="Loading kmers to RAM")
-            
-        #     for n, line in enumerate(kmer_file):
-        #         kmers.append(int(line.split(",")[-1]))
-        #         pbar.update(1)
-        # pbar.close()
-        # logger.info("Finish loading the kmer counts data.")
-
-
-        logger.info("Computing the probability thresholds.")
-        # if plasclass is not None:
-        #     lower_thresh, upper_thresh = 0.5, 0.8
-        # else:
-        #     lower_thresh, upper_thresh = 0.5, 0.7
-        # TODO tune later; 
-        if prob_chrom is None and prob_plas is None:
-            lower_thresh, upper_thresh = get_thresholds(probs)
-        else:
-            lower_thresh, upper_thresh = prob_chrom, prob_plas
-        logger.debug(f"Lower threshold = {lower_thresh} Upper threshold = {upper_thresh}")
-        # logger.info("Finish computing the probability thresholds.")
-
-        classification = np.array(list(map(lambda x: "plasmid" if x > upper_thresh else ("chromosome" if x < lower_thresh else "unclassified"), probs)))
-        
-        # filtered_kmers = []
-
-        # for kmer in tqdm(kmers, desc="Filtering important k-mers"):
-        #     if 5 < kmer < 500:
-        #         filtered_kmers.append(kmer)
-
-        # size_hist = 500
-
-        # logger.info("Computing the kmer counts thresholds.")
-
-
-
-        # threshold, bins = get_best_bins(size_hist, filtered_kmers)
-        # logger.debug(f"Threshold selected = {threshold}, Number of coverage bins visible = {bins}")
-        # logger.info("Computing the kmer counts thresholds.")
-
-        # data_binarised = np.where(p15>threshold, 1, 0)
-
-        profiles = PCA(n_components=2).fit_transform(np.concatenate([p15, p3], axis=1))
-
-        if plots and truth is not None:
-            fig = plt.figure(figsize=(20, 10))
-            ax = fig.add_subplot(1, 2, 1)
-            sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification, palette=palette, alpha=0.1)
-            ax = fig.add_subplot(1, 2, 2)
-            sns.scatterplot(profiles[:,0], profiles[:,1], hue=truth, palette=palette, alpha=0.1)
-            plt.savefig(f"{output}/images/figure.classification-vs-truth.png", dpi=100, format="png")
-
-        elif plots:
-                fig = plt.figure(figsize=(10, 10))
-                sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification, palette=palette, alpha=0.1)
-                plt.savefig(f"{output}/images/figure.classification.png", dpi=100, format="png")
-
-        # preliminary label removal of non-confident ones
-        nbrs = NearestNeighbors(n_neighbors=50, algorithm='ball_tree', n_jobs=threads).fit(profiles)
-        distances, indices = nbrs.kneighbors(profiles)
-
-        classification_corrected = list(classification)
-
-        for i in indices:
-            _label = classification[i[0]]
-            
-            if _label.lower() == "unclassified":
-                continue
-                
-            _others = list(map(lambda x: classification[x], i[1:]))
-            _vote = 0
-            _all_votes = 0
-            
-            for x in _others:
-                if x.lower() == "unclassified":
-                    continue
-                if x == _label:
-                    _vote += 1
-                _all_votes += 1
-
-            if _vote/max(_all_votes, 1) < 0.1 and _all_votes > 30:
-                classification_corrected[i[0]] = "unclassified"
-        classification_corrected = np.array(classification_corrected)
-        
-        if plots:
-            fig = plt.figure(figsize=(20, 10))
-            ax = fig.add_subplot(1, 2, 1)
-            sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification, palette=palette, alpha=0.1)
-            ax = fig.add_subplot(1, 2, 2) 
-            sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification_corrected, palette=palette, alpha=0.1)
-
-            plt.savefig(f"{output}/images/figure.classification-before-and-after-correction.png", dpi=100, format="png")
-
-        classified_labels = classification_corrected[classification_corrected!="unclassified"]
-        classified_profiles = profiles[classification_corrected!="unclassified"]
-        classified_readIds = readIds[classification_corrected!="unclassified"]
-
-        unclassified_labels = classification_corrected[classification_corrected=="unclassified"]
-        unclassified_profiles = profiles[classification_corrected=="unclassified"]
-        unclassified_readIds = readIds[classification_corrected=="unclassified"]
-
-        logger.debug(f"Classified data size = {len(classified_labels)}")
-        logger.debug(f"Unclassified data size = {len(unclassified_labels)}")
-
-        knn_clf = KNeighborsClassifier(50, weights='uniform', n_jobs=threads)
-        trained_model = knn_clf.fit(classified_profiles, classified_labels)
-
-        predicted_labels = trained_model.predict(unclassified_profiles)
-
-        all_profiles = np.append(classified_profiles, unclassified_profiles, axis=0)
-        all_labels = np.append(classified_labels, predicted_labels, axis=0)
-        all_read_ids = np.append(classified_readIds, unclassified_readIds, axis=0)
-
-        if truth is not None:
-            classified_truth = truth[classification_corrected!="unclassified"]
-            unclassified_truth = truth[classification_corrected=="unclassified"]
-            all_truth = np.append(classified_truth, unclassified_truth, axis=0)
-
-            logger.info("Performance before PlasLR correction and classification")
-            logger.info(eval_performance(truth, classification))
-            logger.info("Performance before PlasLR correction and classification")
-            logger.info(eval_performance(all_truth, all_labels))
-        
-        if plots and truth is not None:
-            fig = plt.figure(figsize=(20, 10))
-            ax = fig.add_subplot(1, 2, 1)
-            sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_labels, palette=palette, alpha=0.1)
-            ax = fig.add_subplot(1, 2, 2)
-            sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_truth, palette=palette, alpha=0.1)
-            plt.savefig(f"{output}/images/figure.final-vs-truth.png", dpi=100, format="png")
-        elif plots:
-            fig = plt.figure(figsize=(10, 10))
-            sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_labels, palette=palette, alpha=0.1)
-            plt.savefig(f"{output}/images/figure.final.png", dpi=100, format="png")
-
-        logger.info(f"Writing results to {output}/final.txt")
-        with open(f"{output}/final.txt", "w+") as final_result:
-            for readId, label in tqdm(zip(all_read_ids, all_labels), desc='Writing results', total=len(all_read_ids)):
-                final_result.write(f"{readId}\t{label}\n")
-        logger.info(f"Writing results to {output}/final.txt completed")
-
     elif plasflow:
-        pass    
+        with open(plasflow) as pf_file:
+            for line in pf_file:
+                if len(line.strip()) > 0:
+                    lines += 1
+
+            pf_file.seek(0)
+            probs = [float(sum(map(float, line.strip().split("\t")[24:]))) for line in tqdm(pf_file, total=lines, desc="Loading plasflow results")]   
+
+    probs = np.array(probs)
+
+
+    if truth is not None:
+        truth = np.array([line.strip().replace(">", "") for line in tqdm(open(truth), total=lines, desc="Loading ground truth")])
+
+    p3 = np.array([[float(y) for y in line.strip().split()] for line in tqdm(open(p3), total=lines, desc="Loading composition profiles")])
+    p15 = np.array([[float(y) for y in line.strip().split()] for line in tqdm(open(p15), total=lines, desc="Loading coverage profiles")])
+    readIds = np.array([line.strip() for line in tqdm(open(readIds), total=lines, desc="Loading read ids")])
+    logger.info("Finish loading the data.")
+
+
+    logger.info("Computing the probability thresholds.")
+    if prob_chrom is None and prob_plas is None:
+        lower_thresh, upper_thresh = get_thresholds(probs)
+    else:
+        lower_thresh, upper_thresh = prob_chrom, prob_plas
+    logger.debug(f"Lower threshold = {lower_thresh} Upper threshold = {upper_thresh}")
+    logger.info("Finish computing the probability thresholds.")
+
+    classification = np.array(list(map(lambda x: "plasmid" if x > upper_thresh else ("chromosome" if x < lower_thresh else "unclassified"), probs)))
+    
+
+    profiles = PCA(n_components=2).fit_transform(np.concatenate([p15, p3], axis=1))
+
+    if plots and truth is not None:
+        fig = plt.figure(figsize=(20, 10))
+        ax = fig.add_subplot(1, 2, 1)
+        sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification, palette=palette, alpha=0.1)
+        ax = fig.add_subplot(1, 2, 2)
+        sns.scatterplot(profiles[:,0], profiles[:,1], hue=truth, palette=palette, alpha=0.1)
+        plt.savefig(f"{output}/images/figure.classification-vs-truth.png", dpi=100, format="png")
+
+    elif plots:
+            fig = plt.figure(figsize=(10, 10))
+            sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification, palette=palette, alpha=0.1)
+            plt.savefig(f"{output}/images/figure.classification.png", dpi=100, format="png")
+
+    # preliminary label removal of non-confident ones
+    # nbrs = NearestNeighbors(n_neighbors=50, algorithm='ball_tree', n_jobs=threads).fit(profiles)
+    # distances, indices = nbrs.kneighbors(profiles)
+
+    classification_corrected = list(classification)
+
+    # for i in indices:
+    #     _label = classification[i[0]]
+        
+    #     if _label.lower() == "unclassified":
+    #         continue
+            
+    #     _others = list(map(lambda x: classification[x], i[1:]))
+    #     _vote = 0
+    #     _all_votes = 0
+        
+    #     for x in _others:
+    #         if x.lower() == "unclassified":
+    #             continue
+    #         if x == _label:
+    #             _vote += 1
+    #         _all_votes += 1
+
+    #     if _vote/max(_all_votes, 1) < 0.1 and _all_votes > 30:
+    #         classification_corrected[i[0]] = "unclassified"
+    classification_corrected = np.array(classification_corrected)
+    
+    if plots:
+        fig = plt.figure(figsize=(20, 10))
+        ax = fig.add_subplot(1, 2, 1)
+        sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification, palette=palette, alpha=0.1)
+        ax = fig.add_subplot(1, 2, 2) 
+        sns.scatterplot(profiles[:,0], profiles[:,1], hue=classification_corrected, palette=palette, alpha=0.1)
+
+        plt.savefig(f"{output}/images/figure.classification-before-and-after-correction.png", dpi=100, format="png")
+
+    classified_labels = classification_corrected[classification_corrected!="unclassified"]
+    classified_profiles = profiles[classification_corrected!="unclassified"]
+    classified_readIds = readIds[classification_corrected!="unclassified"]
+
+    unclassified_labels = classification_corrected[classification_corrected=="unclassified"]
+    unclassified_profiles = profiles[classification_corrected=="unclassified"]
+    unclassified_readIds = readIds[classification_corrected=="unclassified"]
+
+    logger.debug(f"Classified data size = {len(classified_labels)}")
+    logger.debug(f"Unclassified data size = {len(unclassified_labels)}")
+
+    knn_clf = KNeighborsClassifier(100, weights='distance', n_jobs=threads)
+    trained_model = knn_clf.fit(classified_profiles, classified_labels)
+    plasmid_class_idx = list(knn_clf.classes_).index("plasmid")
+
+    predicted_labels = trained_model.predict(unclassified_profiles)
+
+    all_profiles = np.append(classified_profiles, unclassified_profiles, axis=0)
+    all_labels = np.append(classified_labels, predicted_labels, axis=0)
+    all_probabilities = knn_clf.predict_proba(all_profiles)
+    all_plasmid_probabilities = all_probabilities.T[plasmid_class_idx]
+    all_read_ids = np.append(classified_readIds, unclassified_readIds, axis=0)
+
+    if truth is not None:
+        classified_truth = truth[classification_corrected!="unclassified"]
+        unclassified_truth = truth[classification_corrected=="unclassified"]
+        all_truth = np.append(classified_truth, unclassified_truth, axis=0)
+
+        logger.info("Performance before PlasLR correction and classification")
+        logger.info(eval_performance(truth, classification))
+        logger.info("Performance before PlasLR correction and classification")
+        logger.info(eval_performance(all_truth, all_labels))
+    
+    if plots and truth is not None:
+        fig = plt.figure(figsize=(20, 10))
+        ax = fig.add_subplot(1, 2, 1)
+        sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_labels, palette=palette, alpha=0.1)
+        ax = fig.add_subplot(1, 2, 2)
+        sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_truth, palette=palette, alpha=0.1)
+        plt.savefig(f"{output}/images/figure.final-vs-truth.png", dpi=100, format="png")
+    elif plots:
+        fig = plt.figure(figsize=(10, 10))
+        sns.scatterplot(all_profiles[:,0], all_profiles[:,1], hue=all_labels, palette=palette, alpha=0.1)
+        plt.savefig(f"{output}/images/figure.final.png", dpi=100, format="png")
+
+    logger.info(f"Writing results to {output}/final.txt")
+    with open(f"{output}/final.txt", "w+") as final_result:
+        for readId, label, probability in tqdm(zip(all_read_ids, all_labels, all_plasmid_probabilities), desc='Writing results', total=len(all_read_ids)):
+            final_result.write(f"{readId}\t{label}\t{probability}\n")
+    logger.info(f"Writing results to {output}/final.txt completed")
+
+     
     
 
 if __name__ == '__main__':   
