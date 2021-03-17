@@ -11,7 +11,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
@@ -103,6 +102,37 @@ def get_thresholds(probs):
 
     return lower_thresh, upper_thresh
 
+def tsne_sampled_func(X, threads):
+    indices = np.random.permutation(list(range(X.shape[0])))
+    reverse = np.argsort(indices)
+
+    x_sample, x_rest = X[indices[:25000]], X[indices[25000:]]
+    
+    sample_affinities = affinity.PerplexityBasedNN(
+        x_sample,
+        perplexity=500,
+        method="approx",
+        n_jobs=8,
+        random_state=0,
+    )
+    
+    sample_init = initialization.pca(x_sample, random_state=42)
+
+    sample_embedding = TSNEEmbedding(
+        sample_init,
+        sample_affinities,
+        negative_gradient_method="fft",
+        n_jobs=threads,
+        verbose=False
+    )
+    
+    sample_embedding1 = sample_embedding.optimize(n_iter=250, exaggeration=12, momentum=0.5)
+    sample_embedding2 = sample_embedding1.optimize(n_iter=750, exaggeration=1, momentum=0.8)
+    rest_init = sample_embedding2.prepare_partial(x_rest, k=1, perplexity=1/3)
+    init_full = np.vstack((sample_embedding2, rest_init))[reverse]
+    
+    return init_full
+
 def get_best_bins(size_hist, kmers):
     bins = np.zeros(size_hist)
     best_flux = 0
@@ -131,7 +161,7 @@ def get_best_bins(size_hist, kmers):
             
     return best_threshold, best_flux
 
-def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, truth=None, prob_plas=None, prob_chrom=None, plots=False, plasclass=None, plasflow=None):
+def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, truth=None, prob_plas=None, prob_chrom=None, plots=False, plasclass=None, plasflow=None, dimension_reduction=None):
     if plots and not os.path.isdir(f"{output}/images/"):
         os.makedirs(f"{output}/images/")
 
@@ -152,7 +182,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
                     lines += 1
 
             pf_file.seek(0)
-            probs = [float(sum(map(float, line.strip().split("\t")[24:]))) for line in tqdm(pf_file, total=lines, desc="Loading plasflow results")]   
+            probs = [sum(map(float, line.strip().split("\t")[24:])) for line in tqdm(pf_file, total=lines, desc="Loading plasflow results")]   
 
     probs = np.array(probs)
 
@@ -176,9 +206,17 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
 
     classification = np.array(list(map(lambda x: "plasmid" if x > upper_thresh else ("chromosome" if x < lower_thresh else "unclassified"), probs)))
     
-
-    profiles = PCA(n_components=2).fit_transform(np.concatenate([p15, p3], axis=1))
-
+    if dimension_reduction == 'umap':
+        import umap
+        mapper = umap.UMAP()
+        profiles = mapper().fit_transform(np.concatenate([p15, p3], axis=1))
+    elif dimension_reduction == 'tsne':
+        from openTSNE import TSNE, TSNEEmbedding, affinity, initialization
+        profiles = tsne_sampled_func(np.concatenate([p15, p3], threads))
+    else:
+        from sklearn.decomposition import PCA
+        profiles = PCA(n_components=2).fit_transform(np.concatenate([p15, p3], axis=1))
+        
     if plots and truth is not None:
         fig = plt.figure(figsize=(20, 10))
         ax = fig.add_subplot(1, 2, 1)

@@ -23,15 +23,12 @@ start_time = time.time()
 parser = argparse.ArgumentParser(description="""PlasLR Plasmid Classification Corrector""")
 
 parser.add_argument('--reads', '-r',
+                    metavar='/path/to/reads',
                     help="Reads path (FASTQ)",
                     type=str,
                     required=True)
-parser.add_argument('--threads', '-t',
-                    help="Thread limit",
-                    type=int,
-                    default=8,
-                    required=False)
 parser.add_argument('--ground-truth', '-g',
+                    metavar='/path/to/truth',
                     help="Read ids of reads (For dry runs with ground truth)",
                     type=str,
                     required=False,
@@ -43,14 +40,14 @@ parser.add_argument('--bin-width', '-bw',
                     required=False,
                     default=10)    
 parser.add_argument('--bin-coverage', '-bc',
-                    metavar='<number of bins for coverage histograms>',
+                    metavar='32',
                     help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
                         Usually k-mers are shifted towards y-axis due to errors. By defaul bc=32; coverages upto 320X",
                     type=int,
                     required=False,
                     default=32)              
 parser.add_argument('--max-mem', '-m',
-                    metavar='<Max memory for DSK in Mb>',
+                    metavar='5000',
                     help="Default 5000. DSK k-mer counter accepts a max memory parameter. However, the complete pipeline requires 5GB+ RAM. \
                         This is only to make DSK step faster, should you have more RAM.",
                     type=int,
@@ -61,32 +58,44 @@ parser.add_argument('--resume',
                     help='Continue from the last step or the binning step (which ever comes first). Can save time needed to run DSK and obtain k-mers. Ideal for sensitivity tuning'
                     )                       
 parser.add_argument('--plasflow', '-pf',
-                    metavar='',
+                    metavar='/path/to/pf.tsv',
                     help="PlasFlow result tsv",
                     type=str,
                     default=None,
                     required=False)
 parser.add_argument('--plasclass', '-pc',
-                    metavar='',
+                    metavar='/path/to/pc',
                     help="PlasClass result",
                     type=str,
                     default=None,
                     required=False)
 parser.add_argument('--prob-chrom', '-C',
-                    help="Chromosome [Default Auto Detected for plasclass and 0.5 for plasflow]",
+                    help="Chromosome [Default Auto]",
                     type=float,
                     default=None,
                     required=False)
 parser.add_argument('--prob-plas', '-P',
-                    metavar='',
-                    help="Plasmid Threshold [Default Auto Detected for plasclass and 0.7 for plasflow]",
+                    help="Plasmid Threshold [Default Auto]",
                     type=str,
                     default=None,
                     required=False)
+parser.add_argument('--dimension-reduction', '-dr',
+                    metavar='pca|tsne|umap',
+                    help="Dimension reduction technique. Defaults to PCA. For others install openTSNE or UMAP Learn libraries.",
+                    type=str,
+                    default=None,
+                    required=False,
+                    choices=['tsne', 'pca', 'umap'])                    
 parser.add_argument('--plots',
                     action='store_true',
                     help="Whether the initial classifications to be corrected or classify based on already labelled ones")
 parser.add_argument('--output', '-o', help="Output directory", type=str, required=True)
+parser.add_argument('--threads', '-t',
+                    help="Thread limit",
+                    metavar='8',
+                    type=int,
+                    default=8,
+                    required=False)
 
 args = parser.parse_args()
 
@@ -102,6 +111,7 @@ threads = args.threads
 prob_plas = args.prob_plas
 prob_chrom = args.prob_chrom
 plots = args.plots
+dimension_reduction = args.dimension_reduction.lower()
 
 checkpointsPath = output + "/checkpoints"
 
@@ -258,7 +268,7 @@ else:
     pf = f"{output}/filtered.pf"
 
 try:
-    plaslr_core.run_plasmid_correction(p3, p15, readIds, kmer_counts, output, threads=threads, truth=truth, prob_plas=prob_plas, prob_chrom=prob_plas, plasclass=pc, plasflow=pf, plots=plots)
+    plaslr_core.run_plasmid_correction(p3, p15, readIds, kmer_counts, output, threads=threads, truth=truth, prob_plas=prob_plas, prob_chrom=prob_plas, plasclass=pc, plasflow=pf, plots=plots, dimension_reduction=dimension_reduction)
 except Exception as e:
     logger.error("Failed to execute PlasLR core!", e)
     sys.exit(1)
