@@ -177,12 +177,13 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
             probs = [float(line.strip().split("\t")[-1]) for line in tqdm(pc_file, total=lines, desc="Loading plasclass results")]
     elif plasflow:
         with open(plasflow) as pf_file:
+            lines = -1
             for line in pf_file:
                 if len(line.strip()) > 0:
                     lines += 1
 
             pf_file.seek(0)
-            probs = [sum(map(float, line.strip().split("\t")[24:])) for line in tqdm(pf_file, total=lines, desc="Loading plasflow results")]   
+            probs = [sum(map(float, line.strip().split("\t")[24:])) for line in tqdm(pf_file.read().strip().split("\n")[1:], total=lines, desc="Loading plasflow results")]   
 
     probs = np.array(probs)
 
