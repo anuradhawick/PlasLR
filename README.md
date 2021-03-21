@@ -13,6 +13,8 @@ PlasLR is coded purely using C++ (v9) and Python 3.6. To run PlasLR, you will ne
 
 ### Python dependencies
 * numpy 1.16.4 
+* scikit-learn 0.22.2.post1
+* biopython 1.78
 * scipy 1.3.0 
 * seaborn 0.9.0
 * h5py 2.9.0
