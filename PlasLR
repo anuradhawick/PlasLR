@@ -41,7 +41,7 @@ parser.add_argument('--bin-width', '-bw',
                     default=10)    
 parser.add_argument('--bin-coverage', '-bc',
                     metavar='32',
-                    help="Value of bw*bs will be the total coverage of k-mers in the coverage histograms. \
+                    help="Total number of bins in the histogram. The computed value of bw*bc will be the total coverage of k-mers in the coverage histograms. \
                         Usually k-mers are shifted towards y-axis due to errors. By defaul bc=32; coverages upto 320X",
                     type=int,
                     required=False,
