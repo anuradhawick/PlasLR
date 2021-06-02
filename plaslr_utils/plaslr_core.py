@@ -210,7 +210,7 @@ def run_plasmid_correction(p3, p15, readIds, kmer_counts, output, *, threads=8, 
     if dimension_reduction == 'umap':
         import umap
         mapper = umap.UMAP()
-        profiles = mapper().fit_transform(np.concatenate([p15, p3], axis=1))
+        profiles = mapper.fit_transform(np.concatenate([p15, p3], axis=1))
     elif dimension_reduction == 'tsne':
         from openTSNE import TSNE, TSNEEmbedding, affinity, initialization
         profiles = tsne_sampled_func(np.concatenate([p15, p3], threads))
