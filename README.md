@@ -60,51 +60,44 @@ PlasLR intends to pick the most accurate classification by either PlasClass or P
 ## Running Program
 
 ```
-usage: PlasLR [-h] --reads READS [--threads THREADS] [--ground-truth <IDS>]
-              [--bin-width <bin width for coverage histograms>]
-              [--bin-coverage <number of bins for coverage histograms>]
-              [--max-mem <Max memory for DSK in Mb>] [--resume] [--plasflow]
-              [--plasclass] [--prob-chrom PROB_CHROM] [--prob-plas] [--plots]
-              --output OUTPUT
+usage: PlasLR [-h] --reads /path/to/reads [--ground-truth /path/to/truth] [--bin-width BIN_WIDTH] [--bin-coverage 32]
+              [--max-mem 5000] [--resume] [--plasflow /path/to/pf.tsv] [--plasclass /path/to/pc] [--prob-chrom PROB_CHROM]
+              [--prob-plas PROB_PLAS] [--dimension-reduction pca|tsne|umap] [--plots] --output OUTPUT [--threads 8]
 
 PlasLR Plasmid Classification Corrector
 
 optional arguments:
   -h, --help            show this help message and exit
-  --reads READS, -r READS
+  --reads /path/to/reads, -r /path/to/reads
                         Reads path (FASTQ)
-  --threads THREADS, -t THREADS
-                        Thread limit
-  --ground-truth GROUND_TRUTH, -g GROUND_TRUTH  Read ids of reads (For dry runs with ground truth)
-  --bin-width <bin width for coverage histograms>, -bw <bin width for coverage histograms>
-                        Value of bw*bs will be the total coverage of k-mers in
-                        the coverage histograms. Usually k-mers are shifted
-                        towards y-axis due to errors. By defaul b=2; coverages
-                        upto 400X
-  --bin-coverage BIN_WIDTH, -bc BIN_WIDTH
-                        Value of bw*bs will be the total coverage of k-mers in
-                        the coverage histograms. Usually k-mers are shifted
-                        towards y-axis due to errors. By defaul bc=200;
-                        coverages upto 400X
-  --max-mem <Max memory for DSK in Mb>, -m <Max memory for DSK in Mb>
-                        Default 5000. DSK k-mer counter accepts a max memory
-                        parameter. However, the complete pipeline requires
-                        5GB+ RAM. This is only to make DSK step faster, should
-                        you have more RAM.
-  --resume              Continue from the last step or the binning step (which
-                        ever comes first). Can save time needed to run DSK and
+  --ground-truth /path/to/truth, -g /path/to/truth
+                        Read ids of reads (For dry runs with ground truth)
+  --bin-width BIN_WIDTH, -bw BIN_WIDTH
+                        Value of bw*bs will be the total coverage of k-mers in the coverage histograms. Usually k-mers are shifted
+                        towards y-axis due to errors. By defaul bw=10.
+  --bin-coverage 32, -bc 32
+                        Total number of bins in the histogram. The computed value of bw*bc will be the total coverage of k-mers in
+                        the coverage histograms. Usually k-mers are shifted towards y-axis due to errors. By defaul bc=32; coverages
+                        upto 320X
+  --max-mem 5000, -m 5000
+                        Default 5000. DSK k-mer counter accepts a max memory parameter. However, the complete pipeline requires 5GB+
+                        RAM. This is only to make DSK step faster, should you have more RAM.
+  --resume              Continue from the last step or the binning step (which ever comes first). Can save time needed to run DSK and
                         obtain k-mers. Ideal for sensitivity tuning
-  --plasflow , -pf      PlasFlow result tsv
-  --plasclass , -pc     PlasClass result
+  --plasflow /path/to/pf.tsv, -pf /path/to/pf.tsv
+                        PlasFlow result tsv
+  --plasclass /path/to/pc, -pc /path/to/pc
+                        PlasClass result
   --prob-chrom PROB_CHROM, -C PROB_CHROM
-                        Chromosome [Default Auto Detected for plasclass and
-                        0.5 for plasflow]
-  --prob-plas , -P      Plasmid Threshold [Default Auto Detected for plasclass
-                        and 0.7 for plasflow]
-  --plots               Whether the initial classifications to be corrected or
-                        classify based on already labelled ones
+                        Chromosome [Default Auto]
+  --prob-plas PROB_PLAS, -P PROB_PLAS
+                        Plasmid Threshold [Default Auto]
+  --dimension-reduction pca|tsne|umap, -dr pca|tsne|umap
+                        Dimension reduction technique. Defaults to PCA. For others install openTSNE or UMAP Learn libraries.
+  --plots               Whether the initial classifications to be corrected or classify based on already labelled ones
   --output OUTPUT, -o OUTPUT
                         Output directory
+  --threads 8, -t 8     Thread limit
 ```
 
 ## Running PlasLR on Test Data
