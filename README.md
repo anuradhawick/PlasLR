@@ -8,6 +8,8 @@
 
 Adaptation of contig based plasmid classification for error prone long reads (PacBio and ONT) to improved genome assembly
 
+> Preprint is now available at [biorxiv](https://www.biorxiv.org/content/10.1101/2021.06.14.448306v1)
+
 ## Dependencies
 PlasLR is coded purely using C++ (v9) and Python 3.6. To run PlasLR, you will need to install the following python and C++ modules.
 
